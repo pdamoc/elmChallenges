@@ -16,7 +16,8 @@ Write a program that fills the screen with small blue circles, produced (pseudo)
 ## Challenge No. 3 
 
 add two new abilities:
-    - when the 'P' key on the keyboard is pressed, pause the generation of new circles and when pressed again, resume.
-    - when the 'R' key on the keyboard is pressed, reset and start the animation from the beginning.
+ 
+- when the 'P' key on the keyboard is pressed, pause the generation of new circles and when pressed again, resume.
+- when the 'R' key on the keyboard is pressed, reset and start the animation from the beginning.
 
 extra: try to add two buttons which will do the same 'P' and 'R' do.
