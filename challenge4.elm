@@ -29,7 +29,7 @@ view string result =
           Ok user ->
               [ div [ myStyle ] [ text user.name ]
               , img  [ src user.avatar_url ] []
-              ]:: map (\lang -> div [ myStyle ] [ text lang ]) user.languages
+              ]--:: map (\lang -> div [ myStyle ] [ text lang ]) user.languages
   in
       div [] (field :: messages)
 
