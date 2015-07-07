@@ -30,13 +30,16 @@ view string result =
 
           Ok user ->
               [ div [ myStyle ] [ text user.name ]
-              , div [ myStyle ] [ text <| "Knows the following programming languages: " ++ (join ", " user.languages)]
+              , div [ myStyle ] [ text <| knownLanguages user.languages]
               , img  [ src user.avatar_url, imgStyle] []
               ]
   in
       div [] ((div [ myStyle ] [ text "GitHub Username" ]) :: field :: messages)
 
 
+knownLanguages : List String -> String 
+knownLanguages langs = 
+  "Knows the following programming languages: " ++ (join ", " langs)
 
 imgStyle : Attribute
 imgStyle =
@@ -86,19 +89,21 @@ lookupUser query =
   succeed ("http://api.github.com/users/" ++ query)
   `andThen` (mapError (always "User not found :(") << Http.get decodeUser)
   `andThen` \userData ->
-    (Http.get decodeLanguages userData.repos_url `onError` (\msg -> succeed [toString msg]))
+    (Http.get decodeLanguages userData.repos_url `onError` 
+      (\msg -> succeed [toString msg]))
   `andThen` \languages -> 
       let 
         user : User
         user =  { name = userData.name
                 , avatar_url = userData.avatar_url
                 , repos_url = userData.repos_url
-                , languages = List.filter notEmpty <| Set.toList <| Set.fromList languages  
+                , languages = notEmptyUnique languages  
                 }
       in succeed user 
 
-notEmpty : String -> Bool
-notEmpty s = not <| String.isEmpty s 
+notEmptyUnique : List String -> List String
+notEmptyUnique xs = 
+  List.filter (\x -> not <| String.isEmpty x) <| Set.toList <| Set.fromList xs
 
 decodeLanguages : Json.Decoder (List (String))
 decodeLanguages = (Json.list  <| Json.oneOf 
