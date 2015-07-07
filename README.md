@@ -22,6 +22,10 @@ add two new abilities:
 
 extra: try to add two buttons which will do the same 'P' and 'R' do.
 
-## Challnge No. 4
+## Challenge No. 4
 
 Write a program that asks the user for a Github username (from textfield) and displays this user's name, avatar and programming languages she/he uses. Fetch the information only after the user stops typing for one second. 
+
+## Challenge No. 5
+
+Write a snake clone. Make it save the top score for each user using local storage. Make it possible to start the game again without refreshing the page.
