@@ -10,9 +10,7 @@ import Set
 import String exposing (join )
 import Time exposing (since, second, Time)
 import Signal exposing (sampleOn, dropRepeats)
-
-debounce : Time -> Signal a -> Signal a
-debounce wait signal = sampleOn (since wait signal |> dropRepeats) signal
+import Debug
 
 -- VIEW
 
@@ -80,13 +78,20 @@ results : Signal.Mailbox (Result String (User))
 results =
   Signal.mailbox (Err "")
 
+maybeQuery : Time -> Signal a -> Signal (Maybe a)
+maybeQuery time sig =
+  Signal.map2 (\b s -> if b then Just s else Nothing) (Signal.map not (time `since` query.signal)) sig
 
 port requests : Signal (Task x ())
 port requests =
-  debounce 1000 query.signal
-    |> Signal.map lookupUser 
-    |> Signal.map (\task -> Task.toResult task `andThen` Signal.send results.address)
-
+  flip Signal.map (maybeQuery second query.signal)
+    (\q ->
+      case q of
+        Nothing ->
+          Task.succeed ()
+        
+        Just str ->
+          Task.toResult (lookupUser str) `andThen` Signal.send results.address)
 
 
 lookupUser : String -> Task String (User)
