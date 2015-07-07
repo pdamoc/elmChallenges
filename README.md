@@ -24,4 +24,4 @@ extra: try to add two buttons which will do the same 'P' and 'R' do.
 
 ## Challnge No. 4
 
-Write a program that asks the user for a Github username (from textfield) and displays this user's name, avatar and programming languages she/he uses.
+Write a program that asks the user for a Github username (from textfield) and displays this user's name, avatar and programming languages she/he uses. Fetch the information only after the user stops typing for one second. 
