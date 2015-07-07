@@ -6,6 +6,8 @@ import Http
 import Json.Decode as Json exposing ((:=))
 import String
 import Task exposing (..)
+import Set
+import String exposing (join )
 
 
 -- VIEW
@@ -14,7 +16,7 @@ view : String -> Result String (User) -> Html
 view string result =
   let field =
         input
-          [ placeholder "GitHub username"
+          [ placeholder "Please enter the GitHub username"
           , value string
           , on "input" targetValue (Signal.message query.address)
           , myStyle
@@ -28,10 +30,21 @@ view string result =
 
           Ok user ->
               [ div [ myStyle ] [ text user.name ]
-              , img  [ src user.avatar_url ] []
-              ]--:: map (\lang -> div [ myStyle ] [ text lang ]) user.languages
+              , div [ myStyle ] [ text <| "Knows the following programming languages: " ++ (join ", " user.languages)]
+              , img  [ src user.avatar_url, imgStyle] []
+              ]
   in
-      div [] (field :: messages)
+      div [] ((div [ myStyle ] [ text "GitHub Username" ]) :: field :: messages)
+
+
+
+imgStyle : Attribute
+imgStyle =
+  style
+    [ ("display", "block")
+    , ("margin-left", "auto")
+    , ("margin-right", "auto")
+    ]
 
 
 myStyle : Attribute
@@ -53,12 +66,12 @@ main =
 
 query : Signal.Mailbox String
 query =
-  Signal.mailbox ""
+  Signal.mailbox "evancz"
 
 
 results : Signal.Mailbox (Result String (User)) 
 results =
-  Signal.mailbox (Err "Please Enter a valid GitHub username")
+  Signal.mailbox (Err "")
 
 
 port requests : Signal (Task x ())
@@ -73,18 +86,25 @@ lookupUser query =
   succeed ("http://api.github.com/users/" ++ query)
   `andThen` (mapError (always "User not found :(") << Http.get decodeUser)
   `andThen` \userData ->
-    (Http.get decodeLanguages userData.repos_url `onError` (\msg -> succeed []))
+    (Http.get decodeLanguages userData.repos_url `onError` (\msg -> succeed [toString msg]))
   `andThen` \languages -> 
       let 
         user : User
         user =  { name = userData.name
                 , avatar_url = userData.avatar_url
                 , repos_url = userData.repos_url
-                , languages = languages  
+                , languages = List.filter notEmpty <| Set.toList <| Set.fromList languages  
                 }
       in succeed user 
 
-decodeLanguages = (Json.list  (Json.at ["language"] Json.string))
+notEmpty : String -> Bool
+notEmpty s = not <| String.isEmpty s 
+
+decodeLanguages : Json.Decoder (List (String))
+decodeLanguages = (Json.list  <| Json.oneOf 
+  [ (Json.at ["language"] Json.string)
+  , (Json.succeed "")
+  ])
 
 type alias User = 
   {name: String
