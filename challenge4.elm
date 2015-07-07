@@ -8,7 +8,11 @@ import String
 import Task exposing (..)
 import Set
 import String exposing (join )
+import Time exposing (since, second, Time)
+import Signal exposing (sampleOn, dropRepeats)
 
+debounce : Time -> Signal a -> Signal a
+debounce wait signal = sampleOn (since wait signal |> dropRepeats) signal
 
 -- VIEW
 
@@ -30,8 +34,8 @@ view string result =
 
           Ok user ->
               [ div [ myStyle ] [ text user.name ]
-              , div [ myStyle ] [ text <| knownLanguages user.languages]
               , img  [ src user.avatar_url, imgStyle] []
+              , div [ myStyle ] [ text <| knownLanguages user.languages]
               ]
   in
       div [] ((div [ myStyle ] [ text "GitHub Username" ]) :: field :: messages)
@@ -79,9 +83,10 @@ results =
 
 port requests : Signal (Task x ())
 port requests =
-  query.signal
+  debounce 1000 query.signal
     |> Signal.map lookupUser 
     |> Signal.map (\task -> Task.toResult task `andThen` Signal.send results.address)
+
 
 
 lookupUser : String -> Task String (User)
