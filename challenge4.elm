@@ -88,18 +88,14 @@ lookupUser : String -> Task String (User)
 lookupUser query =
   succeed ("http://api.github.com/users/" ++ query)
   `andThen` (mapError (always "User not found :(") << Http.get decodeUser)
-  `andThen` \userData ->
-    (Http.get decodeLanguages userData.repos_url `onError` 
+  `andThen` \user ->
+    (Http.get decodeLanguages user.repos_url `onError` 
       (\msg -> succeed [toString msg]))
   `andThen` \languages -> 
       let 
-        user : User
-        user =  { name = userData.name
-                , avatar_url = userData.avatar_url
-                , repos_url = userData.repos_url
-                , languages = notEmptyUnique languages  
-                }
-      in succeed user 
+        user' : User
+        user' =  { user | languages <- notEmptyUnique languages }
+      in succeed user' 
 
 notEmptyUnique : List String -> List String
 notEmptyUnique xs = 
@@ -118,15 +114,9 @@ type alias User =
   , languages: List String
   }
 
-
-type alias UserData = 
-  {name: String
-  , avatar_url: String
-  , repos_url: String
-  }
-
-decodeUser : Json.Decoder (UserData)
-decodeUser = Json.object3 UserData
+decodeUser : Json.Decoder (User)
+decodeUser = Json.object4 User
     ("name" := Json.string) 
     ("avatar_url" := Json.string)
     ("repos_url" := Json.string)
+    (Json.succeed [])
