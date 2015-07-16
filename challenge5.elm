@@ -5,7 +5,7 @@ import Keyboard
 import Time exposing (..)
 import Window
 import Debug
-
+import Random 
 
 -- MODEL
 
@@ -16,20 +16,25 @@ type Status = Start | Active | Paused | End
 type alias Keys = { x:Int, y:Int }
 
 type alias Model =
-  { snake : List (Int, Int)
+  { body : List (Int, Int)
   , dir : Direction
   , status : Status
+  , cherry : Maybe (Int, Int)
   }
 
-pitWidth = 30
+pitWidth = 40
 pitHeight = 20
 pitBlock = 20
 
 startSnake : Model
 startSnake = 
-  { snake = [(pitWidth//2, pitHeight//2), (pitWidth//2-1, pitHeight//2), (pitWidth//2-2, pitHeight//2)]
+  { body = [ (pitWidth//2, pitHeight//2)
+            , (pitWidth//2-1, pitHeight//2)
+            , (pitWidth//2-2, pitHeight//2)
+            ]
   , dir = Down
   , status = Start
+  , cherry = Nothing
   }
 
 
@@ -49,25 +54,45 @@ update input snake =
       | otherwise -> snake
     DeltaKeys t keys -> 
       let 
-        dir = if  | keys.x < 0 && (snake.dir == Up || snake.dir == Down) -> Left
-                  | keys.x > 0 && (snake.dir == Up || snake.dir == Down) -> Right
-                  | keys.y > 0 && (snake.dir == Left || snake.dir == Right) -> Up
-                  | keys.y < 0 && (snake.dir == Left || snake.dir == Right) -> Down
-                  | otherwise  -> snake.dir
-        (newHead, newBody) = newPos snake.dir snake.snake
-        nx = fst newHead
-        ny = snd newHead
+        dir = if  
+          | keys.x < 0 && (snake.dir == Up || snake.dir == Down) -> Left
+          | keys.x > 0 && (snake.dir == Up || snake.dir == Down) -> Right
+          | keys.y > 0 && (snake.dir == Left || snake.dir == Right) -> Up
+          | keys.y < 0 && (snake.dir == Left || snake.dir == Right) -> Down
+          | otherwise  -> snake.dir
+        (newHead, newBody) = newPos snake.dir snake.body
       in
       if
-      | snake.status == Active && (nx >= 0 && nx < pitWidth) && (ny >=   0 && ny < pitHeight) -> 
-          { snake |
-            dir <- dir
-          , snake <- newHead::newBody}
-      | not ((nx >= 0 && nx < pitWidth) && (ny >=   0 && ny < pitHeight)) -> 
+      | snake.status == Active && inside newHead && notBody newHead snake.body-> 
+          if snake.cherry == Just newHead 
+          then 
+            { snake |
+              dir <- dir
+            , body <- newHead::snake.body
+            , cherry <- Nothing}
+          else
+            { snake |
+              dir <- dir
+            , body <- newHead::newBody}
+
+
+      | not <| inside newHead -> 
           { snake | 
             status <- End
           }
-      | otherwise -> snake
+      | otherwise -> 
+          snake
+
+    PopCherry (x, y) -> if 
+      | not <| snake.cherry == Nothing -> snake
+      | List.member (x, y) snake.body -> snake
+      | x == -1 -> snake
+      | otherwise -> {snake | cherry <- Just (x, y)}
+
+notBody head body = not <| List.member head body
+
+inside : (Int, Int) -> Bool
+inside (x, y) = (x >= 0 && x < pitWidth) && (y >= 0 && y < pitHeight)
 
 newPos dir snake = 
   let 
@@ -97,6 +122,9 @@ view (w', h') snake =
     (w, h) = (toFloat w', toFloat h')
     pitWidth' = toFloat pitWidth*pitBlock
     pitHeight' = toFloat pitHeight*pitBlock
+    cherry = case snake.cherry of
+      Just (x, y) -> [circle (pitBlock/2) |> filled red |> moveXY (x, y)]
+      Nothing -> [] 
   in
     collage w' h' <|
         [ rect w h
@@ -105,10 +133,17 @@ view (w', h') snake =
             |> filled (if snake.status == End then red else darkBrown)
         , rect pitWidth' pitHeight'
             |> filled black
-        ] ++ (renderSnake snake)
+        ] ++ (renderSnake snake) ++ cherry
 
 
 type SnakePart = Head | Body
+
+
+moveXY : (Int, Int) -> Graphics.Collage.Form -> Graphics.Collage.Form
+moveXY (x, y) = 
+  move ( toFloat (-pitWidth//2+x)*pitBlock+pitBlock/2
+       , toFloat (pitHeight//2-y)*pitBlock-pitBlock/2)
+
 
 renderSnakePart : SnakePart -> (Int, Int) -> Graphics.Collage.Form
 renderSnakePart part (x, y) = 
@@ -118,11 +153,11 @@ renderSnakePart part (x, y) =
   in 
     rect pitBlock pitBlock 
     |> filled partColor
-    |> move (toFloat  (-pitWidth//2+x)*pitBlock+pitBlock/2, toFloat  (pitHeight//2-y)*pitBlock-pitBlock/2)
+    |> moveXY (x, y)
 
 renderSnake : Model -> List Graphics.Collage.Form
 renderSnake snake = 
-  case snake.snake of 
+  case snake.body of 
       hd::tl ->  renderSnakePart Head hd :: List.map (renderSnakePart Body) tl
       [] -> []
 
@@ -136,10 +171,24 @@ main =
 type Input
   = DeltaKeys Time {x: Int, y:Int}
   | Space Bool
+  | PopCherry (Int, Int)
+
+nextCherry t ((x,y), seed) =
+  Random.generate cherryGen seed
+  
+cherryGen = Random.pair (Random.int 0 pitWidth) (Random.int 0 pitHeight)
+cherrySig = Signal.map PopCherry
+  <| Signal.map (\a -> fst a)
+  <| Signal.foldp nextCherry ((-1,0), Random.initialSeed 42)
+  <| Time.every <| 5*Time.second
 
 input : Signal Input
 input =
   let
     delta = Signal.map (\t -> t/20) (fps 15)  
   in
-     (Signal.mergeMany [Signal.sampleOn delta <| Signal.map2 DeltaKeys delta Keyboard.arrows, Signal.map Space Keyboard.space])
+     (Signal.mergeMany 
+        [ Signal.sampleOn delta <| Signal.map2 DeltaKeys delta Keyboard.arrows
+        , Signal.map Space Keyboard.space
+        , cherrySig
+        ])
