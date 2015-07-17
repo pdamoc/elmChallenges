@@ -168,7 +168,9 @@ moveHead dir (x, y) =
 
 -- VIEW
 
-fruit = toForm <| image pitBlock pitBlock "apple.png"
+--fruit = toForm <| image pitBlock pitBlock "apple.png"
+fruit = toForm <| image pitBlock pitBlock "https://raw.githubusercontent.com/pdamoc/elmChallenges/master/apple.png"
+  
 
 greyText : String -> Form
 greyText s = 
@@ -220,9 +222,16 @@ renderSnakePart part (x, y) =
     Head -> darkYellow
     Body -> yellow
   in 
-    rect pitBlock pitBlock 
-    |> filled partColor
-    |> moveXY (x, y)
+    group [ rect pitBlock pitBlock |> filled partColor 
+    , rect pitBlock pitBlock |> outlined (solid darkBrown)
+    , if part == Head 
+      then 
+        ngon 5 (pitBlock/2.2) |> outlined (solid red)
+      else 
+        rect (pitBlock/1.2) (pitBlock/1.2) 
+          |> outlined (solid darkBrown) 
+
+    ] |> moveXY (x, y)
 
 
 renderSnake : Model -> List Graphics.Collage.Form
