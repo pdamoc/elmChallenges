@@ -8,6 +8,14 @@ import Debug
 import Random 
 import Text exposing (fromString, Text, monospace, bold)
 
+-- CONFIG 
+
+snakeSpeed = 5 
+
+pitWidth = 40
+pitHeight = 20
+pitBlock = 22
+
 -- MODEL
 
 type Direction = Left | Right | Up | Down 
@@ -15,7 +23,6 @@ type Direction = Left | Right | Up | Down
 
 type Status = Start | Active | Paused | End
 
-snakeSpeed = 5 
 
 type alias Keys = { x:Int, y:Int }
 
@@ -27,9 +34,6 @@ type alias Model =
   , delta : Time
   }
 
-pitWidth = 40
-pitHeight = 20
-pitBlock = 20
 
 startSnake : Model
 startSnake = 
@@ -164,6 +168,8 @@ moveHead dir (x, y) =
 
 -- VIEW
 
+fruit = toForm <| image pitBlock pitBlock "apple.png"
+
 greyText : String -> Form
 greyText s = 
   fromString s |> monospace |> Text.color darkGrey |> Text.height 40
@@ -176,7 +182,7 @@ view (w', h') snake =
     pitWidth' = toFloat pitWidth*pitBlock
     pitHeight' = toFloat pitHeight*pitBlock
     cherry = case snake.cherry of
-      Just (x, y) -> [circle (pitBlock/2) |> filled red |> moveXY (x, y)]
+      Just (x, y) -> [fruit |> moveXY (x, y)]
       Nothing -> [] 
     msg = case snake.status of
       Start -> "Press SPACE to Start!"
