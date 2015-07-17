@@ -21,7 +21,6 @@ type alias Keys = { x:Int, y:Int }
 
 type alias Model =
   { body : List (Int, Int)
-  , newDir : Direction
   , dir : Direction
   , status : Status
   , cherry : Maybe (Int, Int)
@@ -38,7 +37,6 @@ startSnake =
             , (pitWidth//2-1, pitHeight//2)
             , (pitWidth//2-2, pitHeight//2)
             ]
-  , newDir = Down
   , dir = Down
   , status = Start
   , cherry = Nothing
@@ -73,17 +71,18 @@ updateDirection keys snake =
       | keys.x > 0 && (snake.dir == Up || snake.dir == Down) -> Right
       | keys.y > 0 && (snake.dir == Left || snake.dir == Right) -> Up
       | keys.y < 0 && (snake.dir == Left || snake.dir == Right) -> Down
-      | otherwise  -> snake.newDir
+      | otherwise  -> snake.dir
   in 
-    {snake | newDir <- newDir}
+    if snake.dir == newDir 
+    then snake
+    else {snake | dir <- newDir, delta <-0}
 
 endIfCollision : Model -> Model
 endIfCollision snake = 
   let
     delta = snake.delta
     body = snake.body
-    dir = snake.newDir
-    (newHead, newBody) = newPos dir body
+    (newHead, newBody) = newPos snake.dir body
   in 
     if 
       | delta == 0 && (outside newHead || List.member newHead body) ->
@@ -97,21 +96,16 @@ moveIfActive snake =
   let 
     delta = snake.delta
     body = snake.body
-    dir = snake.newDir
-    (newHead, newBody) = newPos dir body   
+    (newHead, newBody) = newPos snake.dir body   
   in 
     if 
       | snake.status == Active &&  delta == 0 ->  
         if snake.cherry == Just newHead 
         then 
-          { snake |
-            dir <- dir
-          , body <- newHead::snake.body
+          { snake | body <- newHead::snake.body
           , cherry <- Nothing}
         else
-          { snake |
-            dir <- dir
-          , body <- newHead::newBody}
+          { snake | body <- newHead::newBody}
 
       | otherwise -> snake
 
