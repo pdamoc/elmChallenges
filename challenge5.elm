@@ -10,8 +10,6 @@ import Text exposing (fromString, Text, monospace, bold)
 
 -- CONFIG 
 
-snakeSpeed = 5 
-
 pitWidth = 40
 pitHeight = 20
 pitBlock = 22
@@ -30,8 +28,10 @@ type alias Model =
   { body : List (Int, Int)
   , dir : Direction
   , status : Status
-  , cherry : Maybe (Int, Int)
+  , fruit : Maybe (Int, Int)
   , delta : Time
+  , speed : Float
+  , top10 : List (String, Int)
   }
 
 
@@ -43,8 +43,10 @@ startSnake =
             ]
   , dir = Down
   , status = Start
-  , cherry = Nothing
+  , fruit = Nothing
   , delta = 0
+  , speed = 3
+  , top10 = []
   }
 
 
@@ -63,7 +65,7 @@ updateDelta t snake =
   let 
     newDelta = snake.delta + t
   in 
-    if newDelta > 20/snakeSpeed 
+    if newDelta > 20/snake.speed 
     then {snake | delta <- 0}
     else {snake | delta <- newDelta}
 
@@ -104,10 +106,11 @@ moveIfActive snake =
   in 
     if 
       | snake.status == Active &&  delta == 0 ->  
-        if snake.cherry == Just newHead 
+        if snake.fruit == Just newHead 
         then 
           { snake | body <- newHead::snake.body
-          , cherry <- Nothing}
+          , fruit <- Nothing
+          , speed <- snake.speed + 0.5}
         else
           { snake | body <- newHead::newBody}
 
@@ -127,17 +130,17 @@ update input snake =
 
     DeltaKeys t keys -> 
       updateDelta t snake
-      |> updateDirection keys
+      |> updateDirection (Debug.watch "keys" keys)
       |> endIfCollision
       |> moveIfActive
       |> Debug.watch "snake"
 
-    PopCherry (x, y) -> if 
+    PopFruit (x, y) -> if 
       | snake.status /= Active -> snake
-      | snake.cherry /= Nothing -> snake
+      | snake.fruit /= Nothing -> snake
       | List.member (x, y) snake.body -> snake
       | x == -1 -> snake
-      | otherwise -> {snake | cherry <- Just (x, y)}
+      | otherwise -> {snake | fruit <- Just (x, y)}
 
 
 outside : (Int, Int) -> Bool
@@ -168,14 +171,15 @@ moveHead dir (x, y) =
 
 -- VIEW
 
---fruit = toForm <| image pitBlock pitBlock "apple.png"
-fruit = toForm <| image pitBlock pitBlock "https://raw.githubusercontent.com/pdamoc/elmChallenges/master/apple.png"
+--fruitImg = toForm <| image pitBlock pitBlock "apple.png"
+fruitImg = toForm <| image pitBlock pitBlock "https://raw.githubusercontent.com/pdamoc/elmChallenges/master/apple.png"
   
 
-greyText : String -> Form
-greyText s = 
-  fromString s |> monospace |> Text.color darkGrey |> Text.height 40
-  |> text |> moveXY ((pitWidth//2), 3*(pitHeight//4)) 
+coloredText : String -> Color.Color-> Form
+coloredText s c = 
+  fromString s |> monospace |> Text.color c |> Text.height 40
+  |> text |> moveXY ((pitWidth//2), 4*(pitHeight//5)) 
+
 
 view : (Int, Int) -> Model -> Element
 view (w', h') snake = 
@@ -183,8 +187,8 @@ view (w', h') snake =
     (w, h) = (toFloat w', toFloat h')
     pitWidth' = toFloat pitWidth*pitBlock
     pitHeight' = toFloat pitHeight*pitBlock
-    cherry = case snake.cherry of
-      Just (x, y) -> [fruit |> moveXY (x, y)]
+    fruit = case snake.fruit of
+      Just (x, y) -> [fruitImg |> moveXY (x, y)]
       Nothing -> [] 
     msg = case snake.status of
       Start -> "Press SPACE to Start!"
@@ -192,9 +196,15 @@ view (w', h') snake =
       Paused -> "Press SPACE to Unpause"
       End -> "Press SPACE to Restart"
     info = 
-      if snake.status /= Active 
-      then [(greyText msg) ] 
-      else []
+      case snake.status of 
+        Active -> []
+        End -> 
+          [rect (pitWidth'-2*pitBlock) (pitHeight'-2*pitBlock)
+            |> filled (rgba 100 100 100 0.8)
+          , (coloredText msg white) 
+          ]
+        _ -> [(coloredText msg white) ] 
+      
   in
     collage w' h' <|
         [ rect w h
@@ -203,7 +213,7 @@ view (w', h') snake =
             |> filled (if snake.status == End then red else darkBrown)
         , rect pitWidth' pitHeight'
             |> filled black
-        ] ++ (renderSnake snake) ++ cherry ++ info
+        ] ++ (renderSnake snake) ++ fruit ++ info
 
 
 type SnakePart = Head | Body
@@ -251,20 +261,20 @@ main =
 type Input
   = DeltaKeys Time {x: Int, y:Int}
   | Space Bool
-  | PopCherry (Int, Int)
+  | PopFruit (Int, Int)
 
 
-nextCherry t ((x,y), seed) =
-  Random.generate cherryGen seed
+nextFruit t ((x,y), seed) =
+  Random.generate fruitGen seed
 
   
-cherryGen = Random.pair (Random.int 0 pitWidth) (Random.int 0 pitHeight)
+fruitGen = Random.pair (Random.int 0 <| pitWidth-1) (Random.int 0 <| pitHeight-1)
 
 
-cherrySig = Signal.map PopCherry
+fruitSig = Signal.map PopFruit
   <| Signal.map (\a -> fst a)
-  <| Signal.foldp nextCherry ((-1,0), Random.initialSeed 42)
-  <| Time.every <| 5*Time.second
+  <| Signal.foldp nextFruit ((-1,0), Random.initialSeed 42)
+  <| Time.every <| 2*Time.second
 
 
 input : Signal Input
@@ -275,5 +285,5 @@ input =
      (Signal.mergeMany 
         [ Signal.sampleOn delta <| Signal.map2 DeltaKeys delta Keyboard.arrows
         , Signal.map Space Keyboard.space
-        , cherrySig
+        , fruitSig
         ])
