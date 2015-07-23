@@ -258,11 +258,11 @@ highScoresList highScores =
       toForm <| flow down <| [header]++ (List.map highScoresLine hsList)
 
 
-toPair : List (String) -> (String, String) 
+toPair : List (String) -> Maybe (String, String) 
 toPair l = 
   case l of
-    a::b::[] -> (trim a, trim b)
-    _ -> ("", "")
+    a::b::[] -> Just (trim a, trim b)
+    _ -> Nothing
     
 toStyle : String ->  Attribute
 toStyle s = 
@@ -270,7 +270,7 @@ toStyle s =
     attrs = String.split ";" <| trim s
     attrs' = List.map (\s' -> String.split ":" <| trim s') attrs
   in 
-    style <| List.map toPair attrs' 
+    style <| List.filterMap toPair attrs' 
 
 onEnter : Address a -> a -> Attribute
 onEnter address value =
