@@ -52,6 +52,7 @@ fakeHighScores =
   ]
 
 initHS = Maybe.withDefault fakeHighScores getStorage
+--initHS = fakeHighScores -- for non-storage version
 
 startSnake : Model
 startSnake = 
@@ -165,7 +166,8 @@ update input snake =
   case input of 
     Space space -> if 
       | space && snake.status == End -> 
-        {startSnake | status <- toggleGame snake.status}
+        {startSnake | status <- toggleGame snake.status
+        , highScores <- snake.highScores}
       | space -> 
         {snake | status <- toggleGame snake.status}   
       | otherwise -> 
@@ -432,7 +434,8 @@ inputToHighScore input =
 
 highScoreSig = Signal.filterMap inputToHighScore initHS input
 
--- interactions with localStorage to save the high scores
+-- interactions with localStorage to save the high scores 
+
 port getStorage : Maybe (List (String, Int))
 
 port setStorage : Signal (List (String, Int))
