@@ -7,7 +7,7 @@ import Keyboard
 import Time exposing (..)
 import Window
 import Debug
-import Random 
+import Random exposing (Seed)
 import Text exposing (fromString, Text, monospace, bold)
 import String exposing (trim)
 import Html exposing (fromElement, div, Attribute)
@@ -18,8 +18,15 @@ import Signal exposing (Address)
 
 -- CONFIG 
 
+pitWidth : Int
 pitWidth = 40
-pitHeight = 20
+
+
+pitHeight : Int
+pitHeight = 30
+
+
+pitBlock : number
 pitBlock = 22
 
 -- MODEL
@@ -43,15 +50,7 @@ type alias Model =
   , name : String
   }
 
-fakeHighScores = 
-  [ ("John Snow", 9001)
-  , ("Night's King", 8500)
-  , ("The Mountain", 8000)
-  , ("Drogon", 70)
-  , ("Hodor", 10) 
-  ]
-
-initHS = Maybe.withDefault fakeHighScores getStorage
+initHS = Maybe.withDefault (List.repeat 5 ("", 0)) getStorage
 --initHS = fakeHighScores -- for non-storage version
 
 startSnake : Model
@@ -103,8 +102,8 @@ updateDirection keys snake =
     then snake
     else {snake | dir <- newDir, delta <-0}
 
-highScoreFromSpeed : Float -> Int
-highScoreFromSpeed s = truncate <| ((s-3)/2)*100
+scoreFromSpeed : Float -> Int
+scoreFromSpeed s = truncate <| ((s-3)/2)*100
 
 
 newHighScore : Float -> List (String, Int) -> Bool
@@ -115,7 +114,7 @@ newHighScore speed highScores =
       Just x -> x
       Nothing -> 0
   in 
-    (highScoreFromSpeed speed) > min
+    (scoreFromSpeed speed) > min
 
 
 endIfCollision : Model -> Model
@@ -155,7 +154,7 @@ moveIfActive snake =
 
 updateHighScores name speed highScores = 
   let 
-    highScore = highScoreFromSpeed speed
+    highScore = scoreFromSpeed speed
     highScores' = (name, highScore)::highScores 
     newHighScores = List.reverse <| List.sortBy (\(n, s) -> s) highScores'
   in
@@ -307,12 +306,14 @@ view address (w', h') snake =
     fruit = case snake.fruit of
       Just (x, y) -> [fruitImg |> moveXY (x, y)]
       Nothing -> [] 
+    score = scoreFromSpeed snake.speed
+
     msg = case snake.status of
       Start -> "Press SPACE to Start!"
       Active -> ""
       Paused -> "Press SPACE to Unpause"
       End -> "Press SPACE to Restart"
-      HighScore -> "New High Score: "++ (toString <| highScoreFromSpeed snake.speed)
+      HighScore -> "New High Score: "++ (toString <| score)
 
     info = 
       case snake.status of 
@@ -329,19 +330,26 @@ view address (w', h') snake =
             , (coloredText msg white) 
           ]
         _ -> [(coloredText msg white) ] 
+    
     highScoreForm = case snake.status of 
       HighScore -> [ highScoreInput address snake ]
       _ -> []
-      
+
+    scoreText = if snake.status == Active then (toString score) else ""
+    scoreForm = fromString scoreText |> monospace |> Text.color darkGrey |> Text.height 40
+      |> text |> moveXY ((pitWidth//2), 0) 
+
+
   in
     div [] ([
     fromElement <| collage w' h' <|
         [ rect w h
-            |> filled (rgb 174 238 238)
+            |> filled (rgb 29 41 81)
         , rect (pitWidth'+2*pitBlock) (pitHeight'+2*pitBlock)
             |> filled (if snake.status == End then red else darkBrown)
         , rect pitWidth' pitHeight'
             |> filled black
+        , scoreForm 
         ] ++ (renderSnake snake) ++ fruit ++ info
     ] ++ highScoreForm)
 
@@ -383,6 +391,7 @@ renderSnake snake =
 
 -- SIGNALS
 
+
 main : Signal Html.Html
 main =
   Signal.map2 (view actions.address) Window.dimensions model
@@ -398,10 +407,11 @@ type Input
   --| Nothing
 
 
+nextFruit : Time -> ((Int, Int), Seed) -> ((Int, Int), Seed)
 nextFruit t ((x,y), seed) =
   Random.generate fruitGen seed
 
-  
+
 fruitGen = Random.pair (Random.int 0 <| pitWidth-1) (Random.int 0 <| pitHeight-1)
 
 
@@ -410,8 +420,10 @@ fruitSig = Signal.map PopFruit
   <| Signal.foldp nextFruit ((-1,0), Random.initialSeed 42)
   <| Time.every <| 2*Time.second
 
+
 actions : Signal.Mailbox Input
 actions = Signal.mailbox (Space False)
+
 
 input : Signal Input
 input =
