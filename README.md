@@ -29,3 +29,8 @@ Write a program that asks the user for a Github username (from textfield) and di
 ## Challenge No. 5
 
 Write a snake clone. Make it save the top score for each user using local storage. Make it possible to start the game again without refreshing the page.
+
+
+## Challenge No. 6 
+
+With the previous challenge, sepparate the high score from the rest of the application in its own module so it can be reused in another game. Separate the game into its own module so it can be loaded from another application. 
