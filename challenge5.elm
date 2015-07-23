@@ -424,12 +424,13 @@ input =
         ])
 
 
-updateHS input hs =
+inputToHighScore input =
   case input of
-    HighScoreEntered l -> l
-    _ -> hs
+    HighScoreEntered l -> Just l
+    _ -> Nothing
 
-highScoreSig = Signal.foldp updateHS initHS input
+
+highScoreSig = Signal.filterMap inputToHighScore initHS input
 
 -- interactions with localStorage to save the high scores
 port getStorage : Maybe (List (String, Int))
