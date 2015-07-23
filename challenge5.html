@@ -1,0 +1,25 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Elm • Challenge 5</title>
+  <script type="text/javascript" src="elm.js"></script>
+</head>
+
+<body>
+</body>
+
+<script type="text/javascript">
+var storedState = localStorage.getItem('elm-challenge5');
+var startingState = storedState ? JSON.parse(storedState) : null;
+
+var challenge5 = Elm.fullscreen(Elm.Challenge5, { getStorage: startingState });
+
+challenge5.ports.setStorage.subscribe(function(state) {
+    localStorage.setItem('elm-challenge5', JSON.stringify(state));
+});
+
+</script>
+
+</html>

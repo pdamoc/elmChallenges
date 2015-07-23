@@ -1,3 +1,5 @@
+module Challenge5 where
+
 import Color exposing (..)
 import Graphics.Collage exposing (..)
 import Graphics.Element exposing (..)
@@ -7,6 +9,12 @@ import Window
 import Debug
 import Random 
 import Text exposing (fromString, Text, monospace, bold)
+import String exposing (trim)
+import Html exposing (fromElement, div, Attribute)
+import Html.Attributes exposing (style, type', placeholder, value)
+import Html.Events exposing (on, keyCode, targetValue)
+import Json.Decode as Json
+import Signal exposing (Address)
 
 -- CONFIG 
 
@@ -19,7 +27,7 @@ pitBlock = 22
 type Direction = Left | Right | Up | Down 
 
 
-type Status = Start | Active | Paused | End
+type Status = Start | Active | Paused | End | HighScore
 
 
 type alias Keys = { x:Int, y:Int }
@@ -31,9 +39,19 @@ type alias Model =
   , fruit : Maybe (Int, Int)
   , delta : Time
   , speed : Float
-  , top10 : List (String, Int)
+  , highScores : List (String, Int)
+  , name : String
   }
 
+fakeHighScores = 
+  [ ("John Snow", 9001)
+  , ("Night's King", 8500)
+  , ("The Mountain", 8000)
+  , ("Drogon", 70)
+  , ("Hodor", 10) 
+  ]
+
+initHS = Maybe.withDefault fakeHighScores getStorage
 
 startSnake : Model
 startSnake = 
@@ -46,9 +64,9 @@ startSnake =
   , fruit = Nothing
   , delta = 0
   , speed = 3
-  , top10 = []
+  , highScores = initHS
+  , name = ""
   }
-
 
 -- UPDATE
 
@@ -59,6 +77,7 @@ toggleGame status =
     Paused -> Active
     Start -> Active
     Active -> Paused
+    HighScore -> HighScore
 
 updateDelta : Time -> Model -> Model
 updateDelta t snake =
@@ -83,6 +102,21 @@ updateDirection keys snake =
     then snake
     else {snake | dir <- newDir, delta <-0}
 
+highScoreFromSpeed : Float -> Int
+highScoreFromSpeed s = truncate <| ((s-3)/2)*100
+
+
+newHighScore : Float -> List (String, Int) -> Bool
+newHighScore speed highScores = 
+  let 
+    scores = snd <| List.unzip highScores
+    min = case (List.minimum scores) of
+      Just x -> x
+      Nothing -> 0
+  in 
+    (highScoreFromSpeed speed) > min
+
+
 endIfCollision : Model -> Model
 endIfCollision snake = 
   let
@@ -91,9 +125,11 @@ endIfCollision snake =
     (newHead, newBody) = newPos snake.dir body
   in 
     if 
-      | delta == 0 && (outside newHead || List.member newHead body) ->
+      | snake.status == Active && delta == 0 && (outside newHead || List.member newHead body) ->
         { snake | 
-          status <- End
+          status <- if newHighScore snake.speed snake.highScores 
+            then HighScore 
+            else End
         }
       | otherwise -> snake
 
@@ -116,6 +152,13 @@ moveIfActive snake =
 
       | otherwise -> snake
 
+updateHighScores name speed highScores = 
+  let 
+    highScore = highScoreFromSpeed speed
+    highScores' = (name, highScore)::highScores 
+    newHighScores = List.reverse <| List.sortBy (\(n, s) -> s) highScores'
+  in
+    List.take 5 newHighScores
 
 update : Input -> Model -> Model
 update input snake =
@@ -141,6 +184,16 @@ update input snake =
       | List.member (x, y) snake.body -> snake
       | x == -1 -> snake
       | otherwise -> {snake | fruit <- Just (x, y)}
+
+    HighScoreEntered l -> 
+      {snake | 
+          highScores <- l
+        , name <- ""
+        , status <- End}
+
+    UpdateName name -> 
+      {snake | name <- name}
+    --Nothing -> snake
 
 
 outside : (Int, Int) -> Bool
@@ -175,14 +228,76 @@ moveHead dir (x, y) =
 fruitImg = toForm <| image pitBlock pitBlock "https://raw.githubusercontent.com/pdamoc/elmChallenges/master/apple.png"
   
 
-coloredText : String -> Color.Color-> Form
+coloredText : String -> Color.Color -> Form
 coloredText s c = 
   fromString s |> monospace |> Text.color c |> Text.height 40
   |> text |> moveXY ((pitWidth//2), 4*(pitHeight//5)) 
 
 
-view : (Int, Int) -> Model -> Element
-view (w', h') snake = 
+highScoresLine : (Int, (String, Int)) -> Element
+highScoresLine (i, (name, score)) = 
+  let 
+    pos = toString (i+1)
+    dotsNeeded = 30 - (String.length name) - (String.length (toString score))
+    dots = String.repeat dotsNeeded "."
+    score' = toString score
+    txt = fromString (" " ++ pos ++ "." ++ name ++ dots ++ 
+      if score > 0 then score' else ".")
+  in 
+    txt |> monospace |> Text.color white |> Text.height 40
+    |> leftAligned |> width (pitWidth*pitBlock - 2*pitBlock)
+    -- |> moveXY ((pitWidth//2),   pitHeight + i)   
+
+highScoresList : List (String, Int) -> Form
+highScoresList highScores = 
+    let 
+      hsList = List.indexedMap (,) highScores
+      header = fromString "High Scores" |> monospace |> Text.color white 
+        |> Text.height 40 |> centered |> width (pitWidth*pitBlock - 2*pitBlock)
+    in
+      toForm <| flow down <| [header]++ (List.map highScoresLine hsList)
+
+
+toPair : List (String) -> (String, String) 
+toPair l = 
+  case l of
+    a::b::[] -> (trim a, trim b)
+    _ -> ("", "")
+    
+toStyle : String ->  Attribute
+toStyle s = 
+  let 
+    attrs = String.split ";" <| trim s
+    attrs' = List.map (\s' -> String.split ":" <| trim s') attrs
+  in 
+    style <| List.map toPair attrs' 
+
+onEnter : Address a -> a -> Attribute
+onEnter address value =
+    on "keydown"
+      (Json.customDecoder keyCode is13)
+      (\_ -> Signal.message address value)
+
+
+is13 : Int -> Result String ()
+is13 code =
+  if code == 13 then Ok () else Err "not the right key code"
+
+highScoreInput : Address Input -> Model -> Html.Html
+highScoreInput address snake =
+  div [toStyle "display:flex; position:absolute; top:0; left:0;justify-content:center;align-items:center;width:100%;height:100%;"] 
+      [ Html.input [ toStyle "font-size:40px;"
+        , type' "input"
+        , value snake.name
+        , placeholder "Enter your name"
+        , on "input" targetValue (Signal.message address << UpdateName)
+        , onEnter address (HighScoreEntered (updateHighScores snake.name snake.speed snake.highScores))
+        ] []
+      ] 
+
+
+view : Signal.Address Input -> (Int, Int) -> Model -> Html.Html
+view address (w', h') snake = 
   let
     (w, h) = (toFloat w', toFloat h')
     pitWidth' = toFloat pitWidth*pitBlock
@@ -195,18 +310,30 @@ view (w', h') snake =
       Active -> ""
       Paused -> "Press SPACE to Unpause"
       End -> "Press SPACE to Restart"
+      HighScore -> "New High Score: "++ (toString <| highScoreFromSpeed snake.speed)
+
     info = 
       case snake.status of 
         Active -> []
         End -> 
           [rect (pitWidth'-2*pitBlock) (pitHeight'-2*pitBlock)
             |> filled (rgba 100 100 100 0.8)
+          , highScoresList snake.highScores |> move (0.0, (toFloat 2*pitBlock))
           , (coloredText msg white) 
           ]
+        HighScore -> 
+          [rect (pitWidth'-2*pitBlock) (pitHeight'-2*pitBlock)
+            |> filled (rgba 100 100 100 0.8)
+            , (coloredText msg white) 
+          ]
         _ -> [(coloredText msg white) ] 
+    highScoreForm = case snake.status of 
+      HighScore -> [ highScoreInput address snake ]
+      _ -> []
       
   in
-    collage w' h' <|
+    div [] ([
+    fromElement <| collage w' h' <|
         [ rect w h
             |> filled (rgb 174 238 238)
         , rect (pitWidth'+2*pitBlock) (pitHeight'+2*pitBlock)
@@ -214,6 +341,7 @@ view (w', h') snake =
         , rect pitWidth' pitHeight'
             |> filled black
         ] ++ (renderSnake snake) ++ fruit ++ info
+    ] ++ highScoreForm)
 
 
 type SnakePart = Head | Body
@@ -253,15 +381,19 @@ renderSnake snake =
 
 -- SIGNALS
 
-main : Signal Element
+main : Signal Html.Html
 main =
-  Signal.map2 view Window.dimensions (Signal.foldp update startSnake input)
+  Signal.map2 (view actions.address) Window.dimensions model
 
+model = Signal.foldp update startSnake input
 
 type Input
   = DeltaKeys Time {x: Int, y:Int}
   | Space Bool
   | PopFruit (Int, Int)
+  | HighScoreEntered (List (String, Int))
+  | UpdateName String
+  --| Nothing
 
 
 nextFruit t ((x,y), seed) =
@@ -276,6 +408,8 @@ fruitSig = Signal.map PopFruit
   <| Signal.foldp nextFruit ((-1,0), Random.initialSeed 42)
   <| Time.every <| 2*Time.second
 
+actions : Signal.Mailbox Input
+actions = Signal.mailbox (Space False)
 
 input : Signal Input
 input =
@@ -286,4 +420,19 @@ input =
         [ Signal.sampleOn delta <| Signal.map2 DeltaKeys delta Keyboard.arrows
         , Signal.map Space Keyboard.space
         , fruitSig
+        , actions.signal
         ])
+
+
+updateHS input hs =
+  case input of
+    HighScoreEntered l -> l
+    _ -> hs
+
+highScoreSig = Signal.foldp updateHS initHS input
+
+-- interactions with localStorage to save the high scores
+port getStorage : Maybe (List (String, Int))
+
+port setStorage : Signal (List (String, Int))
+port setStorage = highScoreSig
