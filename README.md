@@ -1,6 +1,7 @@
 # elmChallenges
 
-This is a learning project that aims to help me better understand Elm programming language.
+This is a learning project that provides some interesting challenges for the Elm programming language, intended to be completed after reading the [Elm Architecture Turorial](https://github.com/evancz/elm-architecture-tutorial/).
+
 The challenges are provided by Gil Mizrahi. 
 
 ## Challenge No. 1
@@ -15,21 +16,20 @@ Write a program that fills the screen with small blue circles, produced (pseudo)
 
 ## Challenge No. 3 
 
-add two new abilities:
+Add two new abilities:
  
 - when the 'P' key on the keyboard is pressed, pause the generation of new circles and when pressed again, resume.
 - when the 'R' key on the keyboard is pressed, reset and start the animation from the beginning.
 
-extra: try to add two buttons which will do the same 'P' and 'R' do.
+Extra: try to add two buttons which will do the same things as 'P' and 'R'.
 
 ## Challenge No. 4
 
-Write a program that asks the user for a Github username (from textfield) and displays this user's name, avatar and programming languages she/he uses. Fetch the information only after the user stops typing for one second. 
+Write a program that asks the user for a Github username (from a text field) and displays this user's name, avatar and lists his/her repositories. Fetch the information only after the user stops typing for one second. 
 
 ## Challenge No. 5
 
 Write a snake clone. Make it save the top score for each user using local storage. Make it possible to start the game again without refreshing the page.
-
 
 ## Challenge No. 6 
 
