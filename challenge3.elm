@@ -81,6 +81,7 @@ view address model  =
         ]
 
 
+app : StartApp.App Model
 app = StartApp.start 
   { init = (init, Effects.none)
   , update = update
@@ -90,4 +91,5 @@ app = StartApp.start
     , map KeyPress (map fromCode presses)
     ]}
 
+main : Signal Html
 main = app.html
