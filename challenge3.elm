@@ -1,23 +1,18 @@
 import Color exposing (lightBlue)
 import Graphics.Collage exposing (collage, circle, filled, move)
-import Graphics.Element exposing (Element, layers, container, bottomRight, show)
 import Window exposing (dimensions)
 import Random exposing (Seed, initialSeed, generate, pair, int)
 import Time exposing (every, Time)
-import Keyboard exposing (presses, KeyCode)
-import Char exposing (fromCode)
-import Signal exposing (map, foldp, mergeMany, sampleOn, mailbox, Mailbox)
+import Keyboard exposing (presses)
+import Char exposing (fromCode, KeyCode)
+import Signal exposing (map, sampleOn, Address)
 import Html exposing (Html, div, button, text, toElement, fromElement)
 import Html.Events exposing (onClick)
-
-
-main : Signal Html
-main = map view model 
-
+import StartApp 
+import Effects exposing (Effects)
 
 interval : Signal Time
 interval = every 500
-
 
 type alias Model =
   { locs : List (Int,Int)
@@ -28,8 +23,8 @@ type alias Model =
   }
 
 
-initialModel : Model
-initialModel = 
+init : Model
+init = 
   { locs = []
   , seed = initialSeed 42
   , dimensions = (0,0) 
@@ -37,26 +32,7 @@ initialModel =
   , active = True
   }
 
-
-actionMailbox : Mailbox Char 
-actionMailbox = mailbox 'a' 
-
-    
 type Action = Tick (Int, Int) | KeyPress Char
-
-
-updates : Signal Action
-updates =
-  mergeMany
-    [map Tick (sampleOn interval dimensions)
-    ,map KeyPress (map fromCode presses)
-    ,map KeyPress actionMailbox.signal
-    ]
-
-
-model : Signal Model
-model = foldp update initialModel updates
-
 
 
 getNextCircle : (Int, Int) -> Seed -> ((Int, Int), Seed)
@@ -64,29 +40,32 @@ getNextCircle (w, h) seed =
   generate (pair (int 10 (w-10)) (int 10 (h-10))) seed
 
 
-update: Action -> Model -> Model
+update: Action -> Model -> (Model, Effects Action) 
 update action model= 
   case action of
     Tick (w, h) -> 
       let 
         (pos, seed') = getNextCircle (w, h) model.seed
+        newModel =  
+          if model.active 
+          then { model | seed = seed', dimensions = (w, h), locs = pos :: model.locs}
+          else model 
       in 
-        if model.active then { model | seed <- seed'
-          , dimensions <- (w, h)
-          , locs <- pos :: model.locs}
-        else model 
+        (newModel, Effects.none)
 
     KeyPress char -> 
-      case char of 
-        'p' -> {model | active <-not model.active}
-        'P' -> {model | active <-not model.active}
-        'r' -> {model | locs<-[]}
-        'R' -> {model | locs<-[]}
-        _   -> model
+      let
+        newModel = case char of 
+          'p' -> {model | active = not model.active}
+          'P' -> {model | active = not model.active}
+          'r' -> {model | locs = []}
+          'R' -> {model | locs = []}
+          _   -> model
+      in
+        (newModel, Effects.none)
 
-
-view : Model -> Html
-view model  =
+view : Address Action -> Model -> Html
+view address model  =
   let 
     (w, h) = model.dimensions
     drawCircle (x,y) =
@@ -95,8 +74,20 @@ view model  =
             |> move (toFloat x - toFloat w / 2 , toFloat h / 2 - toFloat y)
   in
       div []
-        [button [onClick actionMailbox.address 'p' ] 
+        [button [onClick address (KeyPress 'p') ] 
                 [text (if model.active then "Pause" else "Play")]
-        ,button [onClick actionMailbox.address 'r' ] [text "Reset"]
+        ,button [onClick address (KeyPress 'r') ] [text "Reset"]
         , fromElement (collage w h (List.map drawCircle model.locs)) 
         ]
+
+
+app = StartApp.start 
+  { init = (init, Effects.none)
+  , update = update
+  , view = view 
+  , inputs =     
+    [ map Tick (sampleOn interval dimensions)
+    , map KeyPress (map fromCode presses)
+    ]}
+
+main = app.html
