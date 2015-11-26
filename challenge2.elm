@@ -3,13 +3,14 @@ import Graphics.Collage exposing (collage, circle, filled, move)
 import Graphics.Element exposing (Element, layers)
 import Window
 import Random exposing (Seed, initialSeed, generate, pair, int)
-import Time exposing (every)
+import Time exposing (every, Time)
 import StartApp 
 import Effects exposing (Effects)
 import Signal exposing (Address)
 import Html exposing (Html, fromElement)
 
-interval = every 500
+interval : Time
+interval = 500
 
 type alias Model =
     { locs : List (Int,Int)
@@ -17,17 +18,18 @@ type alias Model =
     , dimensions: (Int, Int)
     }
 
+init : Model
 init = 
-  ({ locs = []
+  { locs = []
   , seed = initialSeed 42
   , dimensions = (0,0) 
-  }, Effects.none)
+  }
 
 type Action = Update (Int, Int)
 
 dimensionsTick : Signal Action 
 dimensionsTick =
-  Signal.map Update (Signal.sampleOn interval Window.dimensions)
+  Signal.map Update (Signal.sampleOn (every interval) Window.dimensions)
 
 
 update: Action -> Model -> (Model, Effects Action)
@@ -56,11 +58,13 @@ view address model  =
         --, show (w,h)
         ]
 
+app : StartApp.App Model
 app = StartApp.start 
-  { init = init
+  { init = (init, Effects.none)
   , update = update
   , view = view
   , inputs = [ dimensionsTick ]
   }
 
+main : Signal Html
 main = app.html
