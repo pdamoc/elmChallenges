@@ -104,7 +104,7 @@ lookupUser query =
   `andThen` \languages -> 
       let 
         user' : User
-        user' =  { user | languages <- notEmptyUnique languages }
+        user' =  { user | languages = notEmptyUnique languages }
       in succeed user' 
 
 notEmptyUnique : List String -> List String
@@ -118,7 +118,7 @@ decodeLanguages = (Json.list  <| Json.oneOf
   ])
 
 type alias User = 
-  {name: String
+  { name: String
   , avatar_url: String
   , repos_url: String
   , languages: List String
