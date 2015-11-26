@@ -1,9 +1,10 @@
-import Color exposing (lightBlue, purple, white, black)
+import Color exposing (Color, lightBlue, purple, white, black)
 import Graphics.Element exposing (Element, color, container, middle, show, centered)
 import Window
 import Mouse
-import Text 
+import Text exposing (Text)
 
+coloredText : String -> Color -> Text
 coloredText text color = (Text.color color (Text.fromString text))
 
 view: (Int, Int) -> Int -> Element
