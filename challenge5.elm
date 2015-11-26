@@ -85,22 +85,22 @@ updateDelta t snake =
     newDelta = snake.delta + t
   in 
     if newDelta > 20/snake.speed 
-    then {snake | delta <- 0}
-    else {snake | delta <- newDelta}
+    then {snake | delta = 0}
+    else {snake | delta = newDelta}
 
 updateDirection : Keys -> Model -> Model
 updateDirection keys snake = 
   let 
-    newDir = if  
-      | keys.x < 0 && (snake.dir == Up || snake.dir == Down) -> Left
-      | keys.x > 0 && (snake.dir == Up || snake.dir == Down) -> Right
-      | keys.y > 0 && (snake.dir == Left || snake.dir == Right) -> Up
-      | keys.y < 0 && (snake.dir == Left || snake.dir == Right) -> Down
-      | otherwise  -> snake.dir
+    newDir = 
+      if keys.x < 0 && (snake.dir == Up || snake.dir == Down) then Left
+      else if keys.x > 0 && (snake.dir == Up || snake.dir == Down) then Right
+      else if keys.y > 0 && (snake.dir == Left || snake.dir == Right) then Up
+      else if keys.y < 0 && (snake.dir == Left || snake.dir == Right) then Down
+      else snake.dir
   in 
     if snake.dir == newDir 
     then snake
-    else {snake | dir <- newDir, delta <-0}
+    else {snake | dir = newDir, delta =0}
 
 scoreFromSpeed : Float -> Int
 scoreFromSpeed s = truncate <| ((s-3)/2)*100
@@ -124,14 +124,14 @@ endIfCollision snake =
     body = snake.body
     (newHead, newBody) = newPos snake.dir body
   in 
-    if 
-      | snake.status == Active && delta == 0 && (outside newHead || List.member newHead body) ->
-        { snake | 
-          status <- if newHighScore snake.speed snake.highScores 
-            then HighScore 
-            else End
-        }
-      | otherwise -> snake
+    if snake.status == Active && delta == 0 && (outside newHead || List.member newHead body)
+    then
+      { snake | 
+        status = if newHighScore snake.speed snake.highScores 
+          then HighScore 
+          else End
+      }
+    else snake
 
 moveIfActive : Model -> Model
 moveIfActive snake = 
@@ -140,17 +140,16 @@ moveIfActive snake =
     body = snake.body
     (newHead, newBody) = newPos snake.dir body   
   in 
-    if 
-      | snake.status == Active &&  delta == 0 ->  
-        if snake.fruit == Just newHead 
-        then 
-          { snake | body <- newHead::snake.body
-          , fruit <- Nothing
-          , speed <- snake.speed + 0.5}
-        else
-          { snake | body <- newHead::newBody}
-
-      | otherwise -> snake
+    if snake.status == Active &&  delta == 0 
+    then  
+      if snake.fruit == Just newHead 
+      then 
+        { snake | body = newHead::snake.body
+        , fruit = Nothing
+        , speed = snake.speed + 0.5}
+      else
+        { snake | body = newHead::newBody}
+    else snake
 
 updateHighScores name speed highScores = 
   let 
@@ -163,14 +162,12 @@ updateHighScores name speed highScores =
 update : Input -> Model -> Model
 update input snake =
   case input of 
-    Space space -> if 
-      | space && snake.status == End -> 
-        {startSnake | status <- toggleGame snake.status
-        , highScores <- snake.highScores}
-      | space -> 
-        {snake | status <- toggleGame snake.status}   
-      | otherwise -> 
-        snake
+    Space space -> 
+      if space && snake.status == End 
+      then {startSnake | status = toggleGame snake.status
+        , highScores = snake.highScores}
+      else if space then { snake | status = toggleGame snake.status}   
+      else snake
 
     DeltaKeys t keys -> 
       updateDelta t snake
@@ -179,21 +176,20 @@ update input snake =
       |> moveIfActive
       |> Debug.watch "snake"
 
-    PopFruit (x, y) -> if 
-      | snake.status /= Active -> snake
-      | snake.fruit /= Nothing -> snake
-      | List.member (x, y) snake.body -> snake
-      | x == -1 -> snake
-      | otherwise -> {snake | fruit <- Just (x, y)}
+    PopFruit (x, y) -> 
+      if (snake.status /= Active) || (snake.fruit /= Nothing) ||
+        ( List.member (x, y) snake.body) || (x == -1) 
+      then snake
+      else {snake | fruit = Just (x, y)}
 
     HighScoreEntered l -> 
       {snake | 
-          highScores <- l
-        , name <- ""
-        , status <- End}
+          highScores = l
+        , name = ""
+        , status = End}
 
     UpdateName name -> 
-      {snake | name <- name}
+      {snake | name = name}
     --Nothing -> snake
 
 
