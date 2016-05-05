@@ -1,6 +1,6 @@
 # elmChallenges
 
-This is a learning project that provides some interesting challenges for the Elm programming language, intended to be completed after reading the [Elm Architecture Turorial](https://github.com/evancz/elm-architecture-tutorial/).
+This is a learning project that provides some interesting challenges for the Elm programming language, intended to be completed after reading the [Elm Architecture Turorial](https://evancz.gitbooks.io/an-introduction-to-elm/content/architecture/index.html).
 
 The challenges are provided by Gil Mizrahi. 
 
