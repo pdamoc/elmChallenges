@@ -1,4 +1,5 @@
 import Html exposing (..)
+import Html.App as HA
 import Html.Attributes as Attr exposing (..)
 import Html.Events exposing (..)
 import Http
@@ -7,10 +8,8 @@ import String
 import Task exposing (..)
 import Set
 import String exposing (join )
-import Time exposing (since, second, Time)
-import Signal exposing (sampleOn, dropRepeats, Address)
-import StartApp 
-import Effects exposing (Effects)
+import Time exposing (second, Time)
+import AnimationFrame exposing (times)
 
 -- MODEL
 
@@ -32,9 +31,10 @@ init = { query = "evancz", lastKeyPress = Nothing, user = Nothing}
 
 -- UPDATE 
 
-type Action = Update (Maybe User) | UpdateQuery String | Tick Time
+type Msg = 
+  Update (Maybe User) | UpdateQuery String | Tick Time | DoNothing
 
-lookupUser : String -> Effects Action
+lookupUser : String -> Cmd Msg
 lookupUser query =
   ((Http.get decodeUser ("http://api.github.com/users/" ++ query))
   `andThen` \user ->
@@ -46,8 +46,8 @@ lookupUser query =
         user' =  { user | languages = notEmptyUnique languages }
       in succeed user') 
   |> Task.toMaybe 
-  |> Task.map Update
-  |> Effects.task
+  |> Task.perform (\_ -> DoNothing) Update
+  
 
 notEmptyUnique : List String -> List String
 notEmptyUnique xs = 
@@ -66,51 +66,54 @@ decodeUser = Json.object4 User
     ("repos_url" := Json.string)
     (Json.succeed [])
 
-update : Action -> Model -> (Model, Effects Action)
-update action model = 
-  case action of
+update : Msg -> Model -> (Model, Cmd Msg)
+update msg model = 
+  case msg of
     UpdateQuery str -> 
-      ({ model | query = str}, Effects.tick Tick)
+      ({ model | query = str, lastKeyPress = Nothing }, Cmd.none)
     
     Tick time -> 
       case model.lastKeyPress of
-        Nothing -> ({model| lastKeyPress = Just time}, Effects.tick Tick)
+        Nothing -> ({model| lastKeyPress = Just time}, Cmd.none)
         Just t ->  
           if (time - t) > second 
           then ({model| lastKeyPress = Just t}, lookupUser model.query)
-          else (model, Effects.tick Tick)
+          else (model, Cmd.none)
 
     Update user -> 
-      ({ model | user = user}, Effects.none)
+      ({ model | user = user}, Cmd.none)
+
+    DoNothing -> (model, Cmd.none)
 
 -- VIEW
 
-view : Address Action  -> Model -> Html
-view address model =
-  let field =
-        input
-          [ placeholder "Please enter the GitHub username"
-          , value model.query
-          , on "input" targetValue (\s -> Signal.message address (UpdateQuery s))
-          , myStyle
-          ]
-          []
+view : Model -> Html Msg
+view model =
+  let 
+    field =
+      input
+        [ placeholder "Please enter the GitHub username"
+        , value model.query
+        , onInput UpdateQuery
+        , myStyle
+        ]
+        []
 
-      messages =
-        case model.user of
-          Nothing ->
-            let
-              msg = case model.lastKeyPress of 
-                Nothing -> "Looking for user..."
-                Just t -> "User not found :("
-            in
-              [ div [ myStyle ] [ text msg ] ]
+    messages =
+      case model.user of
+        Nothing ->
+          let
+            msg = case model.lastKeyPress of 
+              Nothing -> "Looking for user..."
+              Just t -> "User not found :("
+          in
+            [ div [ myStyle ] [ text msg ] ]
 
-          Just user ->
-              [ div [ myStyle ] [ text user.name ]
-              , img  [ src user.avatar_url, imgStyle] []
-              , div [ myStyle ] [ text <| knownLanguages user.languages]
-              ]
+        Just user ->
+            [ div [ myStyle ] [ text user.name ]
+            , img  [ src user.avatar_url, imgStyle] []
+            , div [ myStyle ] [ text <| knownLanguages user.languages]
+            ]
   in
     div [] ((div [ myStyle ] [ text "GitHub Username" ]) :: field :: messages)
 
@@ -119,7 +122,7 @@ knownLanguages : List String -> String
 knownLanguages langs = 
   "Knows the following programming languages: " ++ (join ", " langs)
 
-imgStyle : Attribute
+imgStyle : Attribute msg
 imgStyle =
   style
     [ ("display", "block")
@@ -128,7 +131,7 @@ imgStyle =
     ]
 
 
-myStyle : Attribute
+myStyle : Attribute msg
 myStyle =
   style
     [ ("width", "100%")
@@ -142,17 +145,12 @@ myStyle =
 -- WIRING
 
 
-app : StartApp.App Model
-app = StartApp.start 
-  { init = (init, lookupUser init.query)
-  , update = update
-  , view = view
-  , inputs = [] }
-
-main : Signal Html
-main = app.html
-
-port tasks : Signal (Task Effects.Never ())
-port tasks = app.tasks
-
-
+main : Program Never
+main =
+  HA.program
+    { init = (init, lookupUser "evancz")
+    , update = update
+    , view = view
+    , subscriptions = 
+        (\_ -> times Tick) 
+    }
