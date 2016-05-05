@@ -1,25 +1,80 @@
-import Color exposing (Color, lightBlue, purple, white, black)
-import Graphics.Element exposing (Element, color, container, middle, show, centered)
-import Window
-import Mouse
-import Text exposing (Text)
+import Html exposing (..)
+import Html.Attributes exposing (..)
+import Html.App as HA
+import Window exposing (Size)
+import Mouse exposing (Position)
+import Task 
 
-coloredText : String -> Color -> Text
-coloredText text color = (Text.color color (Text.fromString text))
 
-view: (Int, Int) -> Int -> Element
-view (w, h) x = 
-      let 
-        (bkg_color, text_color, text) = 
-            if   x < w //2
-            then (purple, white, "Left") 
-            else (lightBlue, black, "Right")
-      in 
-        color bkg_color
-        <| container w h middle 
-        <| centered
-        <| coloredText text text_color
-      
-main : Signal Element
+type alias Model = 
+  { size : Size
+  , position : Position
+  }
+
+
+init : (Model, Cmd Msg)
+init = 
+  ({ size = Size 0 0 
+  , position = Position 0 0 
+  }, Task.perform (\_ -> DoNothing) SizeChange Window.size)
+
+
+type Msg = 
+  SizeChange Size
+  | MouseMove Position 
+  | DoNothing 
+
+
+update : Msg -> Model -> Model
+update msg model = 
+  case msg of 
+    SizeChange size -> {model | size = size}
+    MouseMove pos -> {model | position = pos}
+    DoNothing -> model
+
+
+view: Model -> Html msg
+view model = 
+  let 
+    (bkg_color, text_color, label) = 
+        if model.position.x < model.size.width //2
+        then ("purple", "white", "Left") 
+        else ("lightBlue", "black", "Right") 
+  in 
+    div 
+      [ fullscreen bkg_color]
+      [ span 
+        [ largeText text_color] 
+        [ text label] 
+      ]
+
+
+largeText : String -> Attribute msg
+largeText text_color = 
+  style 
+    [ ("color", text_color)
+    , ("font-family", "sans-serif")
+    , ("font-size", "32px")]
+
+
+fullscreen : String -> Attribute msg
+fullscreen bkg_color = 
+  style 
+    [ ("display", "flex")
+    , ("width", "100vw")
+    , ("minHeight", "100vh")
+    , ("align-items", "center")
+    , ("justify-content", "center")
+    , ("background", bkg_color) ]
+
+
+main : Program Never
 main =
-  Signal.map2 view Window.dimensions Mouse.x
+  HA.program
+    { init = init
+    , update = \msg model -> (update msg model, Cmd.none)
+    , view = view
+    , subscriptions = 
+        (\_ -> Sub.batch [ Window.resizes SizeChange, Mouse.moves MouseMove]) 
+    }
+
