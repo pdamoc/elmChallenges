@@ -1,70 +1,67 @@
-import Color exposing (lightBlue)
-import Graphics.Collage exposing (collage, circle, filled, move)
-import Graphics.Element exposing (Element, layers)
-import Window
-import Random exposing (Seed, initialSeed, generate, pair, int)
+import Svg exposing (..)
+import Svg.Attributes exposing (width, height, viewBox, xmlSpace, cx, cy, r, fill)
+import Html.App as HA
+import Window exposing (Size)
+import Random exposing (generate, pair, int)
 import Time exposing (every, Time)
-import StartApp 
-import Effects exposing (Effects)
-import Signal exposing (Address)
-import Html exposing (Html, fromElement)
+import Task
 
 interval : Time
 interval = 500
 
 type alias Model =
     { locs : List (Int,Int)
-    , seed : Seed
-    , dimensions: (Int, Int)
+    , size: Size
     }
 
-init : Model
+init : (Model, Cmd Msg)
 init = 
-  { locs = []
-  , seed = initialSeed 42
-  , dimensions = (0,0) 
-  }
+  ({ locs = []
+  , size = Size 0 0 
+  }, Task.perform (\_ -> Resize (Size 0 0)) Resize Window.size) 
 
-type Action = Update (Int, Int)
-
-dimensionsTick : Signal Action 
-dimensionsTick =
-  Signal.map Update (Signal.sampleOn (every interval) Window.dimensions)
+type Msg = 
+  Resize Size
+  | Tick Time 
+  | NewDot (Int, Int)
 
 
-update: Action -> Model -> (Model, Effects Action)
-update action model=
-  case action of 
-    Update (w, h) -> 
+update: Msg -> Model -> (Model, Cmd Msg)
+update msg model=
+  case msg of 
+    Resize size -> 
+      ({model| size = size}, Cmd.none)
+    Tick _ -> 
       let 
-        (pos, seed') = generate (pair (int 10 (w-10)) (int 10 (h-10))) model.seed
+        generator =
+          pair (int 10 (model.size.width-10)) (int 10 (model.size.height-10))
       in 
-        ({ model | seed = seed'
-        , dimensions = (w, h)
-        , locs = pos :: model.locs
-        }, Effects.none) 
+        ( model, generate NewDot generator)
 
-view : Address Action -> Model -> Html
-view address model  =
+    NewDot pos -> 
+      ({model| locs = pos::model.locs}, Cmd.none)
+
+view : Model -> Svg msg
+view model =
   let 
-    (w, h) = model.dimensions
-    drawCircle (x,y) =
-          circle 10
-            |> filled lightBlue
-            |> move (toFloat x - toFloat w / 2 , toFloat h / 2 - toFloat y)
-  in
-      fromElement <| layers
-        [ collage w h (List.map drawCircle model.locs) 
-        --, show (w,h)
-        ]
+    w = toString model.size.width
+    h = toString model.size.height
+    viewBoxA = viewBox ("0 0 "++w++" "++h)
+    sLocs = List.map (\(x, y)-> (toString x, toString y)) model.locs
+    toCircle (x, y) = 
+      circle [cx x, cy y, r "10", fill "lightBlue"][]
+  in 
+    svg 
+    [ width w, height h, viewBoxA, xmlSpace "http://www.w3.org/2000/svg" ]
+    (List.map toCircle sLocs)
 
-app : StartApp.App Model
-app = StartApp.start 
-  { init = (init, Effects.none)
-  , update = update
-  , view = view
-  , inputs = [ dimensionsTick ]
-  }
 
-main : Signal Html
-main = app.html
+main : Program Never
+main =
+  HA.program
+    { init = init
+    , update = update
+    , view = view
+    , subscriptions = 
+        (\_ -> Sub.batch [ Window.resizes Resize, Time.every interval Tick]) 
+    }
