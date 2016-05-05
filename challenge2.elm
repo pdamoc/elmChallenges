@@ -45,7 +45,7 @@ view : Model -> Svg msg
 view model =
   let 
     w = toString model.size.width
-    h = toString model.size.height
+    h = toString (model.size.height-5) 
     viewBoxA = viewBox ("0 0 "++w++" "++h)
     sLocs = List.map (\(x, y)-> (toString x, toString y)) model.locs
     toCircle (x, y) = 
