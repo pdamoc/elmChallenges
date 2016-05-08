@@ -24,10 +24,11 @@ type alias Model =
   { query : String
   , lastKeyPress : Maybe Time
   , user : Maybe User
+  , lastUserName : String
   }
 
 init : Model 
-init = { query = "evancz", lastKeyPress = Nothing, user = Nothing}
+init = { query = "evancz", lastKeyPress = Nothing, user = Nothing, lastUserName = ""}
 
 -- UPDATE 
 
@@ -76,8 +77,8 @@ update msg model =
       case model.lastKeyPress of
         Nothing -> ({model| lastKeyPress = Just time}, Cmd.none)
         Just t ->  
-          if (time - t) > second 
-          then ({model| lastKeyPress = Just t}, lookupUser model.query)
+          if ((time - t) > second) && (model.query /= model.lastUserName)
+          then ({model| lastKeyPress = Just t, lastUserName = model.query }, lookupUser model.query)
           else (model, Cmd.none)
 
     Update user -> 
