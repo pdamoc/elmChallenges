@@ -1,6 +1,8 @@
-import Html exposing (..)
-import Html.Attributes exposing (..)
-import Html.App as HA
+import Color exposing (Color, lightBlue, purple, white, black)
+import Element exposing (Element, color, container, middle, show, centered, toHtml)
+import Text exposing (Text)
+import Html.App as App
+import Html exposing (Html)
 import Window exposing (Size)
 import Mouse exposing (Position)
 import Task 
@@ -32,45 +34,28 @@ update msg model =
     MouseMove pos -> {model | position = pos}
     DoNothing -> model
 
+coloredText : String -> Color -> Text
+coloredText text color = (Text.color color (Text.fromString text))
 
 view: Model -> Html msg
 view model = 
   let 
-    (bkg_color, text_color, label) = 
-        if model.position.x < model.size.width //2
-        then ("purple", "white", "Left") 
-        else ("lightBlue", "black", "Right") 
+    (w, h) = (model.size.width, model.size.height)
+    (bkg_color, text_color, text) = 
+        if   model.position.x < w //2
+        then (purple, white, "Left") 
+        else (lightBlue, black, "Right")
   in 
-    div 
-      [ fullscreen bkg_color]
-      [ span 
-        [ largeText text_color] 
-        [ text label] 
-      ]
-
-
-largeText : String -> Attribute msg
-largeText text_color = 
-  style 
-    [ ("color", text_color)
-    , ("font-family", "sans-serif")
-    , ("font-size", "32px")]
-
-
-fullscreen : String -> Attribute msg
-fullscreen bkg_color = 
-  style 
-    [ ("display", "flex")
-    , ("width", "100vw")
-    , ("minHeight", "100vh")
-    , ("align-items", "center")
-    , ("justify-content", "center")
-    , ("background", bkg_color) ]
+    toHtml
+    <| color bkg_color
+    <| container w h middle 
+    <| centered
+    <| coloredText text text_color
 
 
 main : Program Never
 main =
-  HA.program
+  App.program
     { init = init
     , update = \msg model -> (update msg model, Cmd.none)
     , view = view
