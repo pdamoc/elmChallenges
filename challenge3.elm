@@ -8,9 +8,8 @@ import Window exposing (Size)
 import Random exposing (generate, pair, int)
 import Time exposing (every, Time)
 import Task
-import Json.Decode as Json
 import Char
-
+import Keyboard
 
 interval : Time
 interval = 500
@@ -69,16 +68,12 @@ update msg model=
       (model, Cmd.none)
     
 
-onKeyUp : Attribute Msg
-onKeyUp =
-  let 
-    tagger code = 
-      case (Char.toUpper <| Char.fromCode code) of 
-        'P' -> ToggleRunning
-        'R' ->  Reset 
-        _ ->  DoNothing 
-  in 
-    on "keyup" (Json.map tagger keyCode)
+onKeyUp : Int -> Msg
+onKeyUp code =
+  case (Char.toUpper <| Char.fromCode code) of 
+    'P' -> ToggleRunning
+    'R' -> Reset 
+    _ ->  DoNothing 
 
 
 
@@ -86,7 +81,7 @@ view : Model -> Html Msg
 view model =
   let 
     w = toString model.size.width
-    h = toString (model.size.height-5) -- weird bug
+    h = toString (model.size.height-5) -- without substraction, scroll bars are triggered
     viewBoxA = viewBox ("0 0 "++w++" "++h)
     sLocs = List.map (\(x, y)-> (toString x, toString y)) model.locs
     toCircle (x, y) = 
@@ -97,7 +92,7 @@ view model =
       [ button [onClick ToggleRunning] [text playPauseLabel]
       , button [onClick Reset] [text "Reset"]]
   in 
-    div [onKeyUp]
+    div []
     [ buttons 
     , svg 
       [ width w, height h, viewBoxA, xmlSpace "http://www.w3.org/2000/svg" ]
@@ -111,5 +106,5 @@ main =
     , update = update
     , view = view
     , subscriptions = 
-        (\_ -> Sub.batch [ Window.resizes Resize, Time.every interval Tick]) 
+        (\_ -> Sub.batch [ Window.resizes Resize, Time.every interval Tick, Keyboard.presses onKeyUp]) 
     }
