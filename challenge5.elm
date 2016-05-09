@@ -1,20 +1,20 @@
-module Challenge5 where
-
 import Color exposing (..)
-import Graphics.Collage exposing (..)
-import Graphics.Element exposing (..)
-import Keyboard
+import Collage exposing (..)
+import Element exposing (..)
+import Keyboard exposing (KeyCode)
 import Time exposing (..)
-import Window
-import Debug
+import Window exposing (Size)
 import Random exposing (Seed)
 import Text exposing (fromString, Text, monospace, bold)
 import String exposing (trim)
-import Html exposing (fromElement, div, Attribute)
+import Html exposing (Html, Attribute, div)
+import Html.App as App
 import Html.Attributes exposing (style, type', placeholder, value)
 import Html.Events exposing (on, keyCode, targetValue)
 import Json.Decode as Json
-import Signal exposing (Address)
+import AnimationFrame 
+import Task 
+
 
 -- CONFIG 
 
@@ -29,6 +29,8 @@ pitHeight = 30
 pitBlock : number
 pitBlock = 22
 
+fruitInterval = 2*Time.second
+
 -- MODEL
 
 type Direction = Left | Right | Up | Down 
@@ -37,21 +39,21 @@ type Direction = Left | Right | Up | Down
 type Status = Start | Active | Paused | End | HighScore
 
 
-type alias Keys = { x:Int, y:Int }
-
 type alias Model =
   { body : List (Int, Int)
   , dir : Direction
   , status : Status
   , fruit : Maybe (Int, Int)
+  , ripeness : Time
   , delta : Time
   , speed : Float
   , highScores : List (String, Int)
   , name : String
+  , size : Size 
   }
 
-initHS = Maybe.withDefault (List.repeat 5 ("", 0)) getStorage
---initHS = fakeHighScores -- for non-storage version
+--initHS = Maybe.withDefault (List.repeat 5 ("", 0)) getStorage
+initHS = (List.repeat 5 ("", 0)) -- for non-storage version
 
 startSnake : Model
 startSnake = 
@@ -62,10 +64,12 @@ startSnake =
   , dir = Down
   , status = Start
   , fruit = Nothing
+  , ripeness = 0
   , delta = 0
   , speed = 3
   , highScores = initHS
   , name = ""
+  , size = Size 0 0 
   }
 
 -- UPDATE
@@ -82,25 +86,32 @@ toggleGame status =
 updateDelta : Time -> Model -> Model
 updateDelta t snake =
   let 
-    newDelta = snake.delta + t
+    (newDelta, newRipeness) = 
+      if snake.status == Active then 
+        (snake.delta + t, snake.ripeness + t) 
+      else (0, 0) 
   in 
-    if newDelta > 20/snake.speed 
-    then {snake | delta = 0}
-    else {snake | delta = newDelta}
+    if newDelta > 120/snake.speed then 
+      {snake | delta = 0, ripeness = newRipeness}
+    else 
+      {snake | delta = newDelta, ripeness = newRipeness}
 
-updateDirection : Keys -> Model -> Model
-updateDirection keys snake = 
+updateDirection : Direction -> Model -> Model
+updateDirection arrow snake = 
   let 
     newDir = 
-      if keys.x < 0 && (snake.dir == Up || snake.dir == Down) then Left
-      else if keys.x > 0 && (snake.dir == Up || snake.dir == Down) then Right
-      else if keys.y > 0 && (snake.dir == Left || snake.dir == Right) then Up
-      else if keys.y < 0 && (snake.dir == Left || snake.dir == Right) then Down
-      else snake.dir
+      case (arrow, snake.dir == Up || snake.dir == Down) of 
+        (Left, True) -> Left
+        (Right, True) -> Right
+        (Up, False) -> Up
+        (Down, False) -> Down
+        _ -> snake.dir
+
   in 
-    if snake.dir == newDir 
-    then snake
-    else {snake | dir = newDir, delta =0}
+    if snake.dir == newDir then 
+      snake
+    else 
+      {snake | dir = newDir, delta =0}
 
 scoreFromSpeed : Float -> Int
 scoreFromSpeed s = truncate <| ((s-3)/2)*100
@@ -127,9 +138,11 @@ endIfCollision snake =
     if snake.status == Active && delta == 0 && (outside newHead || List.member newHead body)
     then
       { snake | 
-        status = if newHighScore snake.speed snake.highScores 
-          then HighScore 
-          else End
+        status = 
+          if newHighScore snake.speed snake.highScores then 
+            HighScore 
+          else 
+            End
       }
     else snake
 
@@ -159,38 +172,81 @@ updateHighScores name speed highScores =
   in
     List.take 5 newHighScores
 
-update : Input -> Model -> Model
-update input snake =
-  case input of 
-    Space space -> 
-      if space && snake.status == End 
-      then {startSnake | status = toggleGame snake.status
-        , highScores = snake.highScores}
-      else if space then { snake | status = toggleGame snake.status}   
-      else snake
+fruitGen = Random.pair (Random.int 0 <| pitWidth-1) (Random.int 0 <| pitHeight-1)
 
-    DeltaKeys t keys -> 
+popFruitIfRipe snake =
+  if snake.ripeness > fruitInterval then 
+    ({ snake | ripeness = 0 }, Random.generate PopFruit fruitGen)
+  else
+    (snake, Cmd.none) 
+
+noCmd model = (model, Cmd.none)
+
+
+type Msg
+  = Tick Time 
+  | Keys KeyPress
+  | PopFruit (Int, Int)
+  | HighScoreEntered (List (String, Int))
+  | UpdateName String
+  | Resize Size 
+  | DoNothing
+
+type KeyPress = Space | Key Direction | OtherKeys
+
+toKeyPress keyCode =
+  case keyCode of 
+    32 -> Space
+    38 -> Key Up
+    40 -> Key Down
+    37 -> Key Left
+    39 -> Key Right
+    _ -> OtherKeys
+
+update : Msg -> Model -> (Model, Cmd Msg)
+update msg snake =
+  let
+    log = Debug.log "msg " msg 
+  in 
+  case msg of 
+    Keys keyPress ->
+      case keyPress of
+        Space -> 
+          if snake.status == End then 
+            noCmd {startSnake | status = toggleGame snake.status
+                  , highScores = snake.highScores}
+          else  
+            noCmd { snake | status = toggleGame snake.status}   
+        Key arrow -> 
+          noCmd (updateDirection arrow snake)  
+        OtherKeys -> noCmd snake
+
+    Tick t -> 
       updateDelta t snake
-      |> updateDirection (Debug.watch "keys" keys)
       |> endIfCollision
       |> moveIfActive
-      |> Debug.watch "snake"
+      |> popFruitIfRipe
+
 
     PopFruit (x, y) -> 
       if (snake.status /= Active) || (snake.fruit /= Nothing) ||
         ( List.member (x, y) snake.body) || (x == -1) 
-      then snake
-      else {snake | fruit = Just (x, y)}
+      then noCmd snake
+      else noCmd {snake | fruit = Just (x, y)}
 
     HighScoreEntered l -> 
-      {snake | 
+      noCmd { snake | 
           highScores = l
         , name = ""
         , status = End}
 
     UpdateName name -> 
-      {snake | name = name}
-    --Nothing -> snake
+      noCmd { snake | name = name}
+
+    Resize size -> 
+      noCmd { snake | size = size}
+
+    DoNothing -> noCmd snake
 
 
 outside : (Int, Int) -> Bool
@@ -261,7 +317,7 @@ toPair l =
     a::b::[] -> Just (trim a, trim b)
     _ -> Nothing
     
-toStyle : String ->  Attribute
+toStyle : String ->  Attribute msg
 toStyle s = 
   let 
     attrs = String.split ";" <| trim s
@@ -269,34 +325,34 @@ toStyle s =
   in 
     style <| List.filterMap toPair attrs' 
 
-onEnter : Address a -> a -> Attribute
-onEnter address value =
-    on "keydown"
-      (Json.customDecoder keyCode is13)
-      (\_ -> Signal.message address value)
+onEnter : msg -> msg -> Attribute msg
+onEnter fail success =
+  let 
+    tagger code = 
+      if code == 13 then success
+      else fail
+  in 
+    on "keyup" (Json.map tagger keyCode)
+     
 
-
-is13 : Int -> Result String ()
-is13 code =
-  if code == 13 then Ok () else Err "not the right key code"
-
-highScoreInput : Address Input -> Model -> Html.Html
-highScoreInput address snake =
-  div [toStyle "display:flex; position:absolute; top:0; left:0;justify-content:center;align-items:center;width:100%;height:100%;"] 
+highScoreInput : Model -> Html Msg
+highScoreInput snake =
+  div [ toStyle "display:flex; position:absolute; top:0; left:0;justify-content:center;align-items:center;width:100%;height:100%;"] 
       [ Html.input [ toStyle "font-size:40px;"
         , type' "input"
         , value snake.name
         , placeholder "Enter your name"
-        , on "input" targetValue (Signal.message address << UpdateName)
-        , onEnter address (HighScoreEntered (updateHighScores snake.name snake.speed snake.highScores))
+        , on "input" (Json.map UpdateName targetValue)
+        , onEnter DoNothing (HighScoreEntered (updateHighScores snake.name snake.speed snake.highScores))
         ] []
       ] 
 
 
-view : Signal.Address Input -> (Int, Int) -> Model -> Html.Html
-view address (w', h') snake = 
+view : Model -> Html Msg
+view snake = 
   let
-    (w, h) = (toFloat w', toFloat h')
+    {width, height} = snake.size
+    (w, h) = (toFloat width, toFloat height)
     pitWidth' = toFloat pitWidth*pitBlock
     pitHeight' = toFloat pitHeight*pitBlock
     fruit = case snake.fruit of
@@ -328,38 +384,39 @@ view address (w', h') snake =
         _ -> [(coloredText msg white) ] 
     
     highScoreForm = case snake.status of 
-      HighScore -> [ highScoreInput address snake ]
+      HighScore -> [ highScoreInput snake ]
       _ -> []
 
     scoreText = if snake.status == Active then (toString score) else ""
     scoreForm = fromString scoreText |> monospace |> Text.color darkGrey |> Text.height 40
       |> text |> moveXY ((pitWidth//2), 0) 
 
-
-  in
-    div [] ([
-    fromElement <| collage w' h' <|
-        [ rect w h
+    elements = 
+      collage width height 
+        ([ rect w h
             |> filled (rgb 29 41 81)
         , rect (pitWidth'+2*pitBlock) (pitHeight'+2*pitBlock)
             |> filled (if snake.status == End then red else darkBrown)
         , rect pitWidth' pitHeight'
             |> filled black
         , scoreForm 
-        ] ++ (renderSnake snake) ++ fruit ++ info
+        ] ++ (renderSnake snake) ++ fruit ++ info)
+  in
+    div [] ([
+    toHtml elements
     ] ++ highScoreForm)
 
 
 type SnakePart = Head | Body
 
 
-moveXY : (Int, Int) -> Graphics.Collage.Form -> Graphics.Collage.Form
+moveXY : (Int, Int) -> Form -> Form
 moveXY (x, y) = 
   move ( toFloat (-pitWidth//2+x)*pitBlock+pitBlock/2
        , toFloat (pitHeight//2-y)*pitBlock-pitBlock/2)
 
 
-renderSnakePart : SnakePart -> (Int, Int) -> Graphics.Collage.Form
+renderSnakePart : SnakePart -> (Int, Int) -> Form
 renderSnakePart part (x, y) = 
   let 
     partColor = case part of 
@@ -378,73 +435,76 @@ renderSnakePart part (x, y) =
     ] |> moveXY (x, y)
 
 
-renderSnake : Model -> List Graphics.Collage.Form
+renderSnake : Model -> List Form
 renderSnake snake = 
   case snake.body of 
       hd::tl ->  renderSnakePart Head hd :: List.map (renderSnakePart Body) tl
       [] -> []
 
 
--- SIGNALS
+-- WIRING 
 
-
-main : Signal Html.Html
+main : Program Never
 main =
-  Signal.map2 (view actions.address) Window.dimensions model
-
-model = Signal.foldp update startSnake input
-
-type Input
-  = DeltaKeys Time {x: Int, y:Int}
-  | Space Bool
-  | PopFruit (Int, Int)
-  | HighScoreEntered (List (String, Int))
-  | UpdateName String
-  --| Nothing
-
-
-nextFruit : Time -> ((Int, Int), Seed) -> ((Int, Int), Seed)
-nextFruit t ((x,y), seed) =
-  Random.generate fruitGen seed
+  App.program
+    { init = (startSnake, Task.perform (\_ -> DoNothing) Resize Window.size)
+    , update = update
+    , view = view
+    , subscriptions = 
+        (\_ -> Sub.batch 
+          [ Window.resizes Resize
+          , AnimationFrame.diffs Tick
+          , Keyboard.downs (Keys << toKeyPress)]) 
+    }
 
 
-fruitGen = Random.pair (Random.int 0 <| pitWidth-1) (Random.int 0 <| pitHeight-1)
+--main : Signal Html Msg
+--main =
+--  Signal.map2 (view actions.address) Window.dimensions model
+
+--model = Signal.foldp update startSnake input
+
+--nextFruit : Time -> ((Int, Int), Seed) -> ((Int, Int), Seed)
+--nextFruit t ((x,y), seed) =
+--  Random.generate fruitGen seed
 
 
-fruitSig = Signal.map PopFruit
-  <| Signal.map (\a -> fst a)
-  <| Signal.foldp nextFruit ((-1,0), Random.initialSeed 42)
-  <| Time.every <| 2*Time.second
 
 
-actions : Signal.Mailbox Input
-actions = Signal.mailbox (Space False)
+--fruitSig = Signal.map PopFruit
+--  <| Signal.map (\a -> fst a)
+--  <| Signal.foldp nextFruit ((-1,0), Random.initialSeed 42)
+--  <| Time.every <| 2*Time.second
 
 
-input : Signal Input
-input =
-  let
-    delta = Signal.map (\t -> t/20) (fps 30)  
-  in
-     (Signal.mergeMany 
-        [ Signal.sampleOn delta <| Signal.map2 DeltaKeys delta Keyboard.arrows
-        , Signal.map Space Keyboard.space
-        , fruitSig
-        , actions.signal
-        ])
+--actions : Signal.Mailbox Input
+--actions = Signal.mailbox (Space False)
 
 
-inputToHighScore input =
-  case input of
-    HighScoreEntered l -> Just l
-    _ -> Nothing
+--input : Signal Input
+--input =
+--  let
+--    delta = Signal.map (\t -> t/20) (fps 30)  
+--  in
+--     (Signal.mergeMany 
+--        [ Signal.sampleOn delta <| Signal.map2 DeltaKeys delta Keyboard.arrows
+--        , Signal.map Space Keyboard.space
+--        , fruitSig
+--        , actions.signal
+--        ])
 
 
-highScoreSig = Signal.filterMap inputToHighScore initHS input
+--inputToHighScore input =
+--  case input of
+--    HighScoreEntered l -> Just l
+--    _ -> Nothing
+
+
+--highScoreSig = Signal.filterMap inputToHighScore initHS input
 
 -- interactions with localStorage to save the high scores 
 
-port getStorage : Maybe (List (String, Int))
+--port getStorage : Maybe (List (String, Int))
 
-port setStorage : Signal (List (String, Int))
-port setStorage = highScoreSig
+--port setStorage : Signal (List (String, Int))
+--port setStorage = highScoreSig
