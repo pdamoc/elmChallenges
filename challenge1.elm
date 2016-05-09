@@ -18,21 +18,19 @@ init : (Model, Cmd Msg)
 init = 
   ({ size = Size 0 0 
   , position = Position 0 0 
-  }, Task.perform (\_ -> DoNothing) SizeChange Window.size)
+  }, Task.perform (\_ -> SizeChange (Size 0 0)) SizeChange Window.size)
 
 
 type Msg = 
   SizeChange Size
   | MouseMove Position 
-  | DoNothing 
 
 
 update : Msg -> Model -> Model
 update msg model = 
   case msg of 
     SizeChange size -> {model | size = size}
-    MouseMove pos -> {model | position = pos}
-    DoNothing -> model
+    MouseMove pos -> {model | position = pos} 
 
 coloredText : String -> Color -> Text
 coloredText text color = (Text.color color (Text.fromString text))
@@ -62,4 +60,3 @@ main =
     , subscriptions = 
         (\_ -> Sub.batch [ Window.resizes SizeChange, Mouse.moves MouseMove]) 
     }
-
