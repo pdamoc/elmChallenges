@@ -1,5 +1,5 @@
 import Html exposing (..)
-import Html.App as HA
+import Html.App as App
 import Html.Attributes as Attr exposing (..)
 import Html.Events exposing (..)
 import Http
@@ -148,7 +148,7 @@ myStyle =
 
 main : Program Never
 main =
-  HA.program
+  App.program
     { init = (init, lookupUser "evancz")
     , update = update
     , view = view
