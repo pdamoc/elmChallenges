@@ -1,8 +1,12 @@
 # elmChallenges
 
-This is a learning project that provides some interesting challenges for the Elm programming language, intended to be completed after reading the [Elm Architecture Turorial](https://evancz.gitbooks.io/an-introduction-to-elm/content/architecture/index.html).
+This is a learning project that provides some interesting challenges for the Elm programming language, intended to be completed after reading the [Elm Architecture guide](http://guide.elm-lang.org/architecture/index.html).
 
-The challenges are provided by Gil Mizrahi. 
+The challenges were provided by Gil Mizrahi. 
+
+The example code that comes with these challenges requires Elm 0.17 
+
+The code was originally written for 0.15 and might contain outdated idioms.  
 
 ## Challenge No. 1
 
