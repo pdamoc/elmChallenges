@@ -80,8 +80,8 @@ startSnake =
   , size = Size 0 0 
   }
 
-init : { highScores: HighScores } -> (Model, Cmd Msg)
-init { highScores } =
+init : HighScores -> (Model, Cmd Msg)
+init highScores =
   ({startSnake | highScores = highScores}, Task.perform (\_ -> DoNothing) Resize Window.size)
 
 
@@ -193,9 +193,6 @@ popFruitIfRipe snake =
   else
     (snake, Cmd.none) 
 
-noCmd : a -> ( a, Cmd b )
-noCmd model = (model, Cmd.none)
-
 
 type Msg
   = Tick Time 
@@ -225,18 +222,17 @@ update msg snake =
       case keyPress of
         Space -> 
           if snake.status == End then 
-            noCmd {startSnake | status = toggleGame snake.status
-                  , highScores = snake.highScores, size = snake.size}
+            {startSnake | status = toggleGame snake.status 
+                  , highScores = snake.highScores, size = snake.size} ! []
           else  
-            noCmd { snake | status = toggleGame snake.status}   
+            { snake | status = toggleGame snake.status} ! []  
         Key arrow -> 
-          (updateDirection arrow snake) 
+          (updateDirection arrow snake 
           |> (\snake -> if snake.delta == 0 then 
               endIfCollision snake |> moveIfActive
-              else snake)
-          |> noCmd
+              else snake)) ! []
 
-        OtherKeys -> noCmd snake
+        OtherKeys -> snake ! []
 
     Tick t -> 
       updateDelta t snake
@@ -248,8 +244,8 @@ update msg snake =
     PopFruit (x, y) -> 
       case (snake.status, snake.fruit, List.member (x, y) snake.body) of 
         (Active, Nothing, False) -> 
-          noCmd {snake | fruit = Just (x, y)}
-        _ -> noCmd snake
+          {snake | fruit = Just (x, y)} ! []
+        _ -> snake ! []
 
     HighScoreEntered l -> 
       { snake | 
@@ -259,12 +255,12 @@ update msg snake =
       |> (\snake -> (snake, saveHighScore snake.highScores))
 
     UpdateName name -> 
-      noCmd { snake | name = name}
+      { snake | name = name} ! [] 
 
     Resize size -> 
-      noCmd { snake | size = size}
+      { snake | size = size} ! []
 
-    DoNothing -> noCmd snake
+    DoNothing -> snake ! []
 
 
 outside : (Int, Int) -> Bool
@@ -468,7 +464,7 @@ renderSnake snake =
 
 -- WIRING 
 
-main : Program { highScores : HighScores }
+main : Program HighScores 
 main =
   App.programWithFlags
     { init = init 

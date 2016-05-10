@@ -14,7 +14,7 @@
 var storedHighScores = localStorage.getItem('elm-challenge5');
 var startingHighScores = storedHighScores ? JSON.parse(storedHighScores) : null;
 
-var app = Elm.ChallengeFive.fullscreen({ highScores: startingHighScores });
+var app = Elm.ChallengeFive.fullscreen(startingHighScores);
 
 app.ports.saveHighScore.subscribe(function(state) {
     localStorage.setItem('elm-challenge5', JSON.stringify(state));
