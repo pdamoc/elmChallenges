@@ -11,12 +11,12 @@
 </body>
 
 <script type="text/javascript">
-var storedState = localStorage.getItem('elm-challenge5');
-var startingState = storedState ? JSON.parse(storedState) : null;
+var storedHighScores = localStorage.getItem('elm-challenge5');
+var startingHighScores = storedHighScores ? JSON.parse(storedHighScores) : null;
 
-var challenge5 = Elm.fullscreen(Elm.Challenge5, { getStorage: startingState });
+var app = Elm.ChallengeFive.fullscreen({ highScores: startingHighScores });
 
-challenge5.ports.setStorage.subscribe(function(state) {
+app.ports.saveHighScore.subscribe(function(state) {
     localStorage.setItem('elm-challenge5', JSON.stringify(state));
 });
 
