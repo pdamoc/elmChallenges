@@ -1,3 +1,5 @@
+port module ChallengeFive exposing (..)
+
 import Color exposing (..)
 import Collage exposing (..)
 import Element exposing (..)
@@ -26,9 +28,13 @@ pitHeight : Int
 pitHeight = 30
 
 
-pitBlock : number
+pitBlock : Int
 pitBlock = 22
 
+innerWidth : Int
+innerWidth = (pitWidth*pitBlock - 2*pitBlock)
+
+fruitInterval : Time
 fruitInterval = 2*Time.second
 
 -- MODEL
@@ -38,6 +44,7 @@ type Direction = Left | Right | Up | Down
 
 type Status = Start | Active | Paused | End | HighScore
 
+type alias HighScores = List ( String, Int )
 
 type alias Model =
   { body : List (Int, Int)
@@ -47,12 +54,13 @@ type alias Model =
   , ripeness : Time
   , delta : Time
   , speed : Float
-  , highScores : List (String, Int)
+  , highScores : HighScores
   , name : String
   , size : Size 
   }
 
 --initHS = Maybe.withDefault (List.repeat 5 ("", 0)) getStorage
+initHS : HighScores
 initHS = (List.repeat 5 ("", 0)) -- for non-storage version
 
 startSnake : Model
@@ -71,6 +79,11 @@ startSnake =
   , name = ""
   , size = Size 0 0 
   }
+
+init : { highScores: HighScores } -> (Model, Cmd Msg)
+init { highScores } =
+  ({startSnake | highScores = highScores}, Task.perform (\_ -> DoNothing) Resize Window.size)
+
 
 -- UPDATE
 
@@ -91,7 +104,7 @@ updateDelta t snake =
         (snake.delta + t, snake.ripeness + t) 
       else (0, 0) 
   in 
-    if newDelta > 120/snake.speed then 
+    if newDelta > 180/snake.speed then 
       {snake | delta = 0, ripeness = newRipeness}
     else 
       {snake | delta = newDelta, ripeness = newRipeness}
@@ -131,20 +144,16 @@ newHighScore speed highScores =
 endIfCollision : Model -> Model
 endIfCollision snake = 
   let
-    delta = snake.delta
-    body = snake.body
-    (newHead, newBody) = newPos snake.dir body
+    {delta, body, dir, status} = snake
+    (newHead, newBody) = newPos dir body
+    highScore = newHighScore snake.speed snake.highScores
   in 
-    if snake.status == Active && delta == 0 && (outside newHead || List.member newHead body)
-    then
-      { snake | 
-        status = 
-          if newHighScore snake.speed snake.highScores then 
-            HighScore 
-          else 
-            End
-      }
-    else snake
+    case (status, delta, outside newHead || List.member newHead body) of
+      (Active, 0, True) -> 
+        { snake | 
+          status = if highScore then HighScore else End
+        }
+      _ ->  snake
 
 moveIfActive : Model -> Model
 moveIfActive snake = 
@@ -164,6 +173,7 @@ moveIfActive snake =
         { snake | body = newHead::newBody}
     else snake
 
+updateHighScores :String -> Float -> List (String, Int ) -> List (String, Int )
 updateHighScores name speed highScores = 
   let 
     highScore = scoreFromSpeed speed
@@ -172,14 +182,18 @@ updateHighScores name speed highScores =
   in
     List.take 5 newHighScores
 
-fruitGen = Random.pair (Random.int 0 <| pitWidth-1) (Random.int 0 <| pitHeight-1)
+fruitGen : Random.Generator ( Int, Int )
+fruitGen = 
+  Random.pair (Random.int 0 <| pitWidth-1) (Random.int 0 <| pitHeight-1)
 
+popFruitIfRipe: Model -> (Model, Cmd Msg)
 popFruitIfRipe snake =
   if snake.ripeness > fruitInterval then 
     ({ snake | ripeness = 0 }, Random.generate PopFruit fruitGen)
   else
     (snake, Cmd.none) 
 
+noCmd : a -> ( a, Cmd b )
 noCmd model = (model, Cmd.none)
 
 
@@ -194,6 +208,7 @@ type Msg
 
 type KeyPress = Space | Key Direction | OtherKeys
 
+toKeyPress : KeyCode -> KeyPress
 toKeyPress keyCode =
   case keyCode of 
     32 -> Space
@@ -205,20 +220,22 @@ toKeyPress keyCode =
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg snake =
-  let
-    log = Debug.log "msg " msg 
-  in 
   case msg of 
     Keys keyPress ->
       case keyPress of
         Space -> 
           if snake.status == End then 
             noCmd {startSnake | status = toggleGame snake.status
-                  , highScores = snake.highScores}
+                  , highScores = snake.highScores, size = snake.size}
           else  
             noCmd { snake | status = toggleGame snake.status}   
         Key arrow -> 
-          noCmd (updateDirection arrow snake)  
+          (updateDirection arrow snake) 
+          |> (\snake -> if snake.delta == 0 then 
+              endIfCollision snake |> moveIfActive
+              else snake)
+          |> noCmd
+
         OtherKeys -> noCmd snake
 
     Tick t -> 
@@ -229,16 +246,17 @@ update msg snake =
 
 
     PopFruit (x, y) -> 
-      if (snake.status /= Active) || (snake.fruit /= Nothing) ||
-        ( List.member (x, y) snake.body) || (x == -1) 
-      then noCmd snake
-      else noCmd {snake | fruit = Just (x, y)}
+      case (snake.status, snake.fruit, List.member (x, y) snake.body) of 
+        (Active, Nothing, False) -> 
+          noCmd {snake | fruit = Just (x, y)}
+        _ -> noCmd snake
 
     HighScoreEntered l -> 
-      noCmd { snake | 
-          highScores = l
+      { snake | 
+        highScores = l
         , name = ""
         , status = End}
+      |> (\snake -> (snake, saveHighScore snake.highScores))
 
     UpdateName name -> 
       noCmd { snake | name = name}
@@ -277,10 +295,6 @@ moveHead dir (x, y) =
 
 -- VIEW
 
---fruitImg = toForm <| image pitBlock pitBlock "apple.png"
-fruitImg = toForm <| image pitBlock pitBlock "https://raw.githubusercontent.com/pdamoc/elmChallenges/master/apple.png"
-  
-
 coloredText : String -> Color.Color -> Form
 coloredText s c = 
   fromString s |> monospace |> Text.color c |> Text.height 40
@@ -298,17 +312,17 @@ highScoresLine (i, (name, score)) =
       if score > 0 then score' else ".")
   in 
     txt |> monospace |> Text.color white |> Text.height 40
-    |> leftAligned |> width (pitWidth*pitBlock - 2*pitBlock)
-    -- |> moveXY ((pitWidth//2),   pitHeight + i)   
+    |> leftAligned --|> width innerWidth
+     --|> moveXY ((pitWidth//2),   pitHeight + i)   
 
 highScoresList : List (String, Int) -> Form
 highScoresList highScores = 
-    let 
-      hsList = List.indexedMap (,) highScores
-      header = fromString "High Scores" |> monospace |> Text.color white 
-        |> Text.height 40 |> centered |> width (pitWidth*pitBlock - 2*pitBlock)
-    in
-      toForm <| flow down <| [header]++ (List.map highScoresLine hsList)
+  let 
+    hsList = List.indexedMap (,) highScores
+    header = fromString "High Scores" |> monospace |> Text.color white 
+      |> Text.height 40 |> centered --|> width 
+  in
+    toForm <| flow down <| [header] ++ (List.map highScoresLine hsList)
 
 
 toPair : List (String) -> Maybe (String, String) 
@@ -353,8 +367,12 @@ view snake =
   let
     {width, height} = snake.size
     (w, h) = (toFloat width, toFloat height)
-    pitWidth' = toFloat pitWidth*pitBlock
-    pitHeight' = toFloat pitHeight*pitBlock
+    pitWidth' = toFloat <| pitWidth*pitBlock
+    pitHeight' = toFloat <| pitHeight*pitBlock
+    pitBlock' = toFloat pitBlock
+    --fruitImg = toForm <| image pitBlock pitBlock "apple.png"
+    fruitImg = toForm <| image pitBlock pitBlock "https://raw.githubusercontent.com/pdamoc/elmChallenges/master/apple.png"
+
     fruit = case snake.fruit of
       Just (x, y) -> [fruitImg |> moveXY (x, y)]
       Nothing -> [] 
@@ -371,13 +389,13 @@ view snake =
       case snake.status of 
         Active -> []
         End -> 
-          [rect (pitWidth'-2*pitBlock) (pitHeight'-2*pitBlock)
+          [rect (pitWidth'-2*pitBlock') (pitHeight'-2*pitBlock')
             |> filled (rgba 100 100 100 0.8)
-          , highScoresList snake.highScores |> move (0.0, (toFloat 2*pitBlock))
+          , highScoresList snake.highScores |> move (0.0, 2*pitBlock')
           , (coloredText msg white) 
           ]
         HighScore -> 
-          [rect (pitWidth'-2*pitBlock) (pitHeight'-2*pitBlock)
+          [rect (pitWidth'-2*pitBlock') (pitHeight'-2*pitBlock')
             |> filled (rgba 100 100 100 0.8)
             , (coloredText msg white) 
           ]
@@ -395,7 +413,7 @@ view snake =
       collage width height 
         ([ rect w h
             |> filled (rgb 29 41 81)
-        , rect (pitWidth'+2*pitBlock) (pitHeight'+2*pitBlock)
+        , rect (pitWidth'+2*pitBlock') (pitHeight'+2*pitBlock')
             |> filled (if snake.status == End then red else darkBrown)
         , rect pitWidth' pitHeight'
             |> filled black
@@ -412,24 +430,30 @@ type SnakePart = Head | Body
 
 moveXY : (Int, Int) -> Form -> Form
 moveXY (x, y) = 
-  move ( toFloat (-pitWidth//2+x)*pitBlock+pitBlock/2
-       , toFloat (pitHeight//2-y)*pitBlock-pitBlock/2)
+  let 
+    halfPit = pitBlock//2
+    halfWidth = pitWidth//2
+    halfHeight = pitHeight//2
+    
+  in 
+    move ( toFloat <| (x-halfWidth)*pitBlock+halfPit
+         , toFloat <| (halfHeight-y)*pitBlock-halfPit)
 
 
 renderSnakePart : SnakePart -> (Int, Int) -> Form
 renderSnakePart part (x, y) = 
   let 
-    partColor = case part of 
-    Head -> darkYellow
-    Body -> yellow
+    partColor = if part == Head then darkYellow else yellow
+    pitBlock' = toFloat pitBlock
+
   in 
-    group [ rect pitBlock pitBlock |> filled partColor 
-    , rect pitBlock pitBlock |> outlined (solid darkBrown)
+    group [ rect pitBlock' pitBlock' |> filled partColor 
+    , rect pitBlock' pitBlock' |> outlined (solid darkBrown)
     , if part == Head 
       then 
-        ngon 5 (pitBlock/2.2) |> outlined (solid red)
+        ngon 5 (pitBlock'/2.2) |> outlined (solid red)
       else 
-        rect (pitBlock/1.2) (pitBlock/1.2) 
+        rect (pitBlock'/1.2) (pitBlock'/1.2) 
           |> outlined (solid darkBrown) 
 
     ] |> moveXY (x, y)
@@ -444,10 +468,10 @@ renderSnake snake =
 
 -- WIRING 
 
-main : Program Never
+main : Program { highScores : HighScores }
 main =
-  App.program
-    { init = (startSnake, Task.perform (\_ -> DoNothing) Resize Window.size)
+  App.programWithFlags
+    { init = init 
     , update = update
     , view = view
     , subscriptions = 
@@ -457,54 +481,4 @@ main =
           , Keyboard.downs (Keys << toKeyPress)]) 
     }
 
-
---main : Signal Html Msg
---main =
---  Signal.map2 (view actions.address) Window.dimensions model
-
---model = Signal.foldp update startSnake input
-
---nextFruit : Time -> ((Int, Int), Seed) -> ((Int, Int), Seed)
---nextFruit t ((x,y), seed) =
---  Random.generate fruitGen seed
-
-
-
-
---fruitSig = Signal.map PopFruit
---  <| Signal.map (\a -> fst a)
---  <| Signal.foldp nextFruit ((-1,0), Random.initialSeed 42)
---  <| Time.every <| 2*Time.second
-
-
---actions : Signal.Mailbox Input
---actions = Signal.mailbox (Space False)
-
-
---input : Signal Input
---input =
---  let
---    delta = Signal.map (\t -> t/20) (fps 30)  
---  in
---     (Signal.mergeMany 
---        [ Signal.sampleOn delta <| Signal.map2 DeltaKeys delta Keyboard.arrows
---        , Signal.map Space Keyboard.space
---        , fruitSig
---        , actions.signal
---        ])
-
-
---inputToHighScore input =
---  case input of
---    HighScoreEntered l -> Just l
---    _ -> Nothing
-
-
---highScoreSig = Signal.filterMap inputToHighScore initHS input
-
--- interactions with localStorage to save the high scores 
-
---port getStorage : Maybe (List (String, Int))
-
---port setStorage : Signal (List (String, Int))
---port setStorage = highScoreSig
+port saveHighScore : HighScores -> Cmd msg
