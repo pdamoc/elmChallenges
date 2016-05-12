@@ -24,10 +24,10 @@ type alias Model =
 
 init : (Model, Cmd Msg)
 init = 
-  ({ locs = []
+  { locs = []
   , size = Size 0 0 
   , isRunning = True
-  }, Task.perform (\_ -> DoNothing) Resize Window.size) 
+  } ! [Task.perform (\_ -> DoNothing) Resize Window.size] 
 
 
 type Msg = 
@@ -43,7 +43,7 @@ update: Msg -> Model -> (Model, Cmd Msg)
 update msg model=
   case msg of 
     Resize size -> 
-      ({model| size = size}, Cmd.none)
+      {model| size = size} ! []
     Tick _ -> 
       let 
         generator =
@@ -53,19 +53,19 @@ update msg model=
             generate NewDot generator 
             else Cmd.none
       in 
-        ( model, cmd)
+        model ! [cmd]
 
     NewDot pos -> 
-      ({model| locs = pos::model.locs}, Cmd.none)
+      {model| locs = pos::model.locs} ! []
 
     ToggleRunning -> 
-      ({model| isRunning = not model.isRunning}, Cmd.none)
+      {model| isRunning = not model.isRunning} ! []
  
     Reset -> 
-      ({model| locs = []}, Cmd.none)
+      {model| locs = []} ! []
  
     DoNothing -> 
-      (model, Cmd.none)
+      model ! []
     
 
 onKeyUp : Int -> Msg
