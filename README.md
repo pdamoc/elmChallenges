@@ -37,4 +37,4 @@ Write a snake clone. Make it save the top score for each user using local storag
 
 ## Challenge No. 6 
 
-With the previous challenge, sepparate the high score from the rest of the application in its own module so it can be reused in another game. Separate the game into its own module so it can be loaded from another application. 
+With the previous challenge, separate the high score from the rest of the application in its own module so it can be reused in another game. Separate the game into its own module so it can be loaded from another application. 
