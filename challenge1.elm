@@ -1,74 +1,70 @@
-module Challenge1 exposing (..)
+module Challenge1 exposing (main)
 
-import Color exposing (Color, lightBlue, purple, white, black)
-import Element exposing (Element, color, container, middle, show, centered, toHtml)
-import Text exposing (Text)
-import Html exposing (Html)
-import Window exposing (Size)
-import Mouse exposing (Position)
-import Task
+import Browser
+import Browser.Events exposing (onMouseMove, onResize)
+import Html exposing (Html, button, div, text)
+import Html.Attributes exposing (class, style)
+import Json.Decode as Decode
 
 
 type alias Model =
-    { size : Size
-    , position : Position
+    { windowWidth : Int
+    , mouseX : Int
     }
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( { size = Size 0 0
-      , position = Position 0 0
-      }
-    , Task.perform SizeChange Window.size
-    )
+init : Model -> ( Model, Cmd Msg )
+init initialModel =
+    ( initialModel, Cmd.none )
 
 
 type Msg
-    = SizeChange Size
-    | MouseMove Position
+    = SetMouseX Int
+    | SetWindowWidth Int
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        SizeChange size ->
-            { model | size = size }
+        SetMouseX mouseX ->
+            ( { model | mouseX = mouseX }, Cmd.none )
 
-        MouseMove pos ->
-            { model | position = pos }
-
-
-coloredText : String -> Color -> Text
-coloredText text color =
-    (Text.color color (Text.fromString text))
+        SetWindowWidth windowWidth ->
+            ( { model | windowWidth = windowWidth }, Cmd.none )
 
 
-view : Model -> Html msg
+view : Model -> Html Msg
 view model =
     let
-        ( w, h ) =
-            ( model.size.width, model.size.height )
+        ( message, color, backgroundColor ) =
+            if model.mouseX < (model.windowWidth // 2) then
+                ( "LEFT", "white", "black" )
 
-        ( bkg_color, text_color, text ) =
-            if model.position.x < w // 2 then
-                ( purple, white, "Left" )
             else
-                ( lightBlue, black, "Right" )
+                ( "RIGHT", "black", "white" )
     in
-        toHtml <|
-            color bkg_color <|
-                container w h middle <|
-                    centered <|
-                        coloredText text text_color
+    div [ class "container", style "color" color, style "background-color" backgroundColor ]
+        [ text message ]
 
 
-main : Program Never Model Msg
+mouseXDecoder : Decode.Decoder Int
+mouseXDecoder =
+    Decode.field "clientX" Decode.int
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ onResize (\width height -> SetWindowWidth width)
+        , onMouseMove (Decode.map SetMouseX mouseXDecoder)
+        ]
+
+
+main : Program Model Model Msg
 main =
-    Html.program
+    Browser.element
         { init = init
-        , update = \msg model -> ( update msg model, Cmd.none )
         , view = view
-        , subscriptions =
-            (\_ -> Sub.batch [ Window.resizes SizeChange, Mouse.moves MouseMove ])
+        , update = update
+        , subscriptions = subscriptions
         }
