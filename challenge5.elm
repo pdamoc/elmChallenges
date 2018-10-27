@@ -1,751 +1,262 @@
-port module ChallengeFive exposing (..)
+port module Challenge5 exposing (main)
 
-import Color exposing (..)
-import Collage exposing (..)
-import Element exposing (..)
-import Keyboard exposing (KeyCode)
-import Time exposing (..)
-import Window exposing (Size)
-import Random exposing (Seed)
-import Text exposing (fromString, Text, monospace, bold)
-import String exposing (trim)
-import Html exposing (Html, Attribute, div, programWithFlags)
-import Html.Attributes exposing (style, type_, placeholder, value)
-import Html.Events exposing (on, keyCode, targetValue)
-import Json.Decode as Json
-import AnimationFrame
-import Task
+import Browser
+import Browser.Events exposing (onKeyPress)
+import Html exposing (Html, button, div, text)
+import Html.Attributes exposing (class, style)
+import Html.Events exposing (onClick)
+import Json.Decode as Decode
+import List.Extra as List
+import Random
+import Time
 
 
--- CONFIG
-
-
-pitWidth : Int
-pitWidth =
-    40
-
-
-pitHeight : Int
-pitHeight =
-    30
-
-
-pitBlock : Int
-pitBlock =
-    22
-
-
-innerWidth : Int
-innerWidth =
-    (pitWidth * pitBlock - 2 * pitBlock)
-
-
-fruitInterval : Time
-fruitInterval =
-    2 * Time.second
-
-
-
--- MODEL
+type alias Box =
+    { x : Int
+    , y : Int
+    }
 
 
 type Direction
-    = Left
-    | Right
-    | Up
+    = Up
     | Down
-
-
-type Status
-    = Start
-    | Active
-    | Paused
-    | End
-    | HighScore
-
-
-type alias HighScores =
-    List ( String, Int )
+    | Left
+    | Right
 
 
 type alias Model =
-    { body : List ( Int, Int )
-    , dir : Direction
-    , status : Status
-    , fruit : Maybe ( Int, Int )
-    , ripeness : Time
-    , delta : Time
-    , speed : Float
-    , highScores : HighScores
-    , name : String
-    , size : Size
+    { direction : Direction
+    , head : Box
+    , tail : List Box
+    , isGameover : Bool
+    , food : Box
+    , score : Int
+    , highScore : Int
     }
 
 
-
---initHS = Maybe.withDefault (List.repeat 5 ("", 0)) getStorage
-
-
-initHS : HighScores
-initHS =
-    (List.repeat 5 ( "", 0 ))
-
-
-
--- for non-storage version
-
-
-startSnake : Model
-startSnake =
-    { body =
-        [ ( pitWidth // 2, pitHeight // 2 )
-        , ( pitWidth // 2 - 1, pitHeight // 2 )
-        , ( pitWidth // 2 - 2, pitHeight // 2 )
-        ]
-    , dir = Down
-    , status = Start
-    , fruit = Nothing
-    , ripeness = 0
-    , delta = 0
-    , speed = 3
-    , highScores = initHS
-    , name = ""
-    , size = Size 0 0
+initialModel : Model
+initialModel =
+    { direction = Right
+    , head = { x = 0, y = 9 }
+    , tail = []
+    , isGameover = False
+    , food = { x = 9, y = 9 }
+    , score = 0
+    , highScore = 0
     }
 
 
-init : HighScores -> ( Model, Cmd Msg )
-init highScores =
-    ( { startSnake | highScores = highScores }, Task.perform Resize Window.size )
-
-
-
--- UPDATE
-
-
-toggleGame : Status -> Status
-toggleGame status =
-    case status of
-        End ->
-            Active
-
-        Paused ->
-            Active
-
-        Start ->
-            Active
-
-        Active ->
-            Paused
-
-        HighScore ->
-            HighScore
-
-
-updateDelta : Time -> Model -> Model
-updateDelta t snake =
-    let
-        ( newDelta, newRipeness ) =
-            if snake.status == Active then
-                ( snake.delta + t, snake.ripeness + t )
-            else
-                ( 0, 0 )
-    in
-        if newDelta > 180 / snake.speed then
-            { snake | delta = 0, ripeness = newRipeness }
-        else
-            { snake | delta = newDelta, ripeness = newRipeness }
-
-
-updateDirection : Direction -> Model -> Model
-updateDirection arrow snake =
-    let
-        newDir =
-            case ( arrow, snake.dir == Up || snake.dir == Down ) of
-                ( Left, True ) ->
-                    Left
-
-                ( Right, True ) ->
-                    Right
-
-                ( Up, False ) ->
-                    Up
-
-                ( Down, False ) ->
-                    Down
-
-                _ ->
-                    snake.dir
-    in
-        if snake.dir == newDir then
-            snake
-        else
-            { snake | dir = newDir, delta = 0 }
-
-
-scoreFromSpeed : Float -> Int
-scoreFromSpeed s =
-    truncate <| ((s - 3) / 2) * 100
-
-
-newHighScore : Float -> List ( String, Int ) -> Bool
-newHighScore speed highScores =
-    let
-        scores =
-            Tuple.second <| List.unzip highScores
-
-        min =
-            case (List.minimum scores) of
-                Just x ->
-                    x
-
-                Nothing ->
-                    0
-    in
-        (scoreFromSpeed speed) > min
-
-
-endIfCollision : Model -> Model
-endIfCollision snake =
-    let
-        { delta, body, dir, status } =
-            snake
-
-        ( newHead, newBody ) =
-            newPos dir body
-
-        highScore =
-            newHighScore snake.speed snake.highScores
-    in
-        case ( status, delta, outside newHead || List.member newHead body ) of
-            ( Active, 0, True ) ->
-                { snake
-                    | status =
-                        if highScore then
-                            HighScore
-                        else
-                            End
-                }
-
-            _ ->
-                snake
-
-
-moveIfActive : Model -> Model
-moveIfActive snake =
-    let
-        delta =
-            snake.delta
-
-        body =
-            snake.body
-
-        ( newHead, newBody ) =
-            newPos snake.dir body
-    in
-        if snake.status == Active && delta == 0 then
-            if snake.fruit == Just newHead then
-                { snake
-                    | body = newHead :: snake.body
-                    , fruit = Nothing
-                    , speed = snake.speed + 0.5
-                }
-            else
-                { snake | body = newHead :: newBody }
-        else
-            snake
-
-
-updateHighScores : String -> Float -> List ( String, Int ) -> List ( String, Int )
-updateHighScores name speed highScores =
+init : Decode.Value -> ( Model, Cmd Msg )
+init value =
     let
         highScore =
-            scoreFromSpeed speed
-
-        highScores_ =
-            ( name, highScore ) :: highScores
-
-        newHighScores =
-            List.reverse <| List.sortBy (\( n, s ) -> s) highScores_
+            Decode.decodeValue Decode.string value
+                |> Result.withDefault "0"
+                |> String.toInt
+                |> Maybe.withDefault 0
     in
-        List.take 5 newHighScores
-
-
-fruitGen : Random.Generator ( Int, Int )
-fruitGen =
-    Random.pair (Random.int 0 <| pitWidth - 1) (Random.int 0 <| pitHeight - 1)
-
-
-popFruitIfRipe : Model -> ( Model, Cmd Msg )
-popFruitIfRipe snake =
-    if snake.ripeness > fruitInterval then
-        ( { snake | ripeness = 0 }, Random.generate PopFruit fruitGen )
-    else
-        ( snake, Cmd.none )
+    ( { initialModel | highScore = highScore }, Cmd.none )
 
 
 type Msg
-    = Tick Time
-    | Keys KeyPress
-    | PopFruit ( Int, Int )
-    | HighScoreEntered (List ( String, Int ))
-    | UpdateName String
-    | Resize Size
-    | DoNothing
+    = NoOp
+    | Tick
+    | SetDirection Direction
+    | SetFood Box
+    | Restart
 
 
-type KeyPress
-    = Space
-    | Key Direction
-    | OtherKeys
+areOppositeDirections : Direction -> Direction -> Bool
+areOppositeDirections direction direction_ =
+    case direction of
+        Up ->
+            direction_ == Down
+
+        Down ->
+            direction_ == Up
+
+        Left ->
+            direction_ == Right
+
+        Right ->
+            direction_ == Left
 
 
-toKeyPress : KeyCode -> KeyPress
-toKeyPress keyCode =
-    case keyCode of
-        32 ->
-            Space
-
-        38 ->
-            Key Up
-
-        40 ->
-            Key Down
-
-        37 ->
-            Key Left
-
-        39 ->
-            Key Right
-
-        _ ->
-            OtherKeys
+isOutOfBounds : Box -> Bool
+isOutOfBounds { x, y } =
+    x < 0 || x >= 20 || y < 0 || y >= 20
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg snake =
+update msg ({ head, tail, direction, isGameover, food, score, highScore } as model) =
     case msg of
-        Keys keyPress ->
-            case keyPress of
-                Space ->
-                    if snake.status == End then
-                        { startSnake
-                            | status = toggleGame snake.status
-                            , highScores = snake.highScores
-                            , size = snake.size
-                        }
-                            ! []
-                    else
-                        { snake | status = toggleGame snake.status } ! []
+        NoOp ->
+            ( model, Cmd.none )
 
-                Key arrow ->
-                    (updateDirection arrow snake
-                        |> (\snake ->
-                                if snake.delta == 0 then
-                                    endIfCollision snake |> moveIfActive
-                                else
-                                    snake
-                           )
-                    )
-                        ! []
+        Tick ->
+            if isGameover then
+                ( model, Cmd.none )
 
-                OtherKeys ->
-                    snake ! []
-
-        Tick t ->
-            updateDelta t snake
-                |> endIfCollision
-                |> moveIfActive
-                |> popFruitIfRipe
-
-        PopFruit ( x, y ) ->
-            case ( snake.status, snake.fruit, List.member ( x, y ) snake.body ) of
-                ( Active, Nothing, False ) ->
-                    { snake | fruit = Just ( x, y ) } ! []
-
-                _ ->
-                    snake ! []
-
-        HighScoreEntered l ->
-            { snake
-                | highScores = l
-                , name = ""
-                , status = End
-            }
-                |> (\snake -> ( snake, saveHighScore snake.highScores ))
-
-        UpdateName name ->
-            { snake | name = name } ! []
-
-        Resize size ->
-            { snake | size = size } ! []
-
-        DoNothing ->
-            snake ! []
-
-
-outside : ( Int, Int ) -> Bool
-outside ( x, y ) =
-    not <| (x >= 0 && x < pitWidth) && (y >= 0 && y < pitHeight)
-
-
-newPos : Direction -> List ( Int, Int ) -> ( ( Int, Int ), List ( Int, Int ) )
-newPos dir snake =
-    let
-        body =
-            List.take ((List.length snake) - 1) snake
-
-        head_ =
-            List.head body
-
-        head =
-            case head_ of
-                Just ( x, y ) ->
-                    ( x, y )
-
-                Nothing ->
-                    ( 0, 0 )
-
-        newHead =
-            (moveHead dir head)
-    in
-        ( newHead, body )
-
-
-moveHead : Direction -> ( Int, Int ) -> ( Int, Int )
-moveHead dir ( x, y ) =
-    case dir of
-        Up ->
-            ( x, y - 1 )
-
-        Down ->
-            ( x, y + 1 )
-
-        Left ->
-            ( x - 1, y )
-
-        Right ->
-            ( x + 1, y )
-
-
-
--- VIEW
-
-
-coloredText : String -> Color.Color -> Form
-coloredText s c =
-    fromString s
-        |> monospace
-        |> Text.color c
-        |> Text.height 40
-        |> text
-        |> moveXY ( (pitWidth // 2), 4 * (pitHeight // 5) )
-
-
-highScoresLine : ( Int, ( String, Int ) ) -> Element
-highScoresLine ( i, ( name, score ) ) =
-    let
-        pos =
-            toString (i + 1)
-
-        dotsNeeded =
-            30 - (String.length name) - (String.length (toString score))
-
-        dots =
-            String.repeat dotsNeeded "."
-
-        score_ =
-            toString score
-
-        txt =
-            fromString
-                (" "
-                    ++ pos
-                    ++ "."
-                    ++ name
-                    ++ dots
-                    ++ if score > 0 then
-                        score_
-                       else
-                        "."
-                )
-    in
-        txt
-            |> monospace
-            |> Text.color white
-            |> Text.height 40
-            |> leftAligned
-
-
-
---|> width innerWidth
---|> moveXY ((pitWidth//2),   pitHeight + i)
-
-
-highScoresList : List ( String, Int ) -> Form
-highScoresList highScores =
-    let
-        hsList =
-            List.indexedMap (,) highScores
-
-        header =
-            fromString "High Scores"
-                |> monospace
-                |> Text.color white
-                |> Text.height 40
-                |> centered
-
-        --|> width
-    in
-        toForm <| flow down <| [ header ] ++ (List.map highScoresLine hsList)
-
-
-toPair : List String -> Maybe ( String, String )
-toPair l =
-    case l of
-        a :: b :: [] ->
-            Just ( trim a, trim b )
-
-        _ ->
-            Nothing
-
-
-toStyle : String -> Attribute msg
-toStyle s =
-    let
-        attrs =
-            String.split ";" <| trim s
-
-        attrs_ =
-            List.map (\s_ -> String.split ":" <| trim s_) attrs
-    in
-        style <| List.filterMap toPair attrs_
-
-
-onEnter : msg -> msg -> Attribute msg
-onEnter fail success =
-    let
-        tagger code =
-            if code == 13 then
-                success
             else
-                fail
-    in
-        on "keyup" (Json.map tagger keyCode)
+                let
+                    newHead =
+                        case direction of
+                            Up ->
+                                { head | y = head.y - 1 }
 
+                            Down ->
+                                { head | y = head.y + 1 }
 
-highScoreInput : Model -> Html Msg
-highScoreInput snake =
-    div [ toStyle "display:flex; position:absolute; top:0; left:0;justify-content:center;align-items:center;width:100%;height:100%;" ]
-        [ Html.input
-            [ toStyle "font-size:40px;"
-            , type_ "input"
-            , value snake.name
-            , placeholder "Enter your name"
-            , on "input" (Json.map UpdateName targetValue)
-            , onEnter DoNothing (HighScoreEntered (updateHighScores snake.name snake.speed snake.highScores))
-            ]
-            []
-        ]
+                            Left ->
+                                { head | x = head.x - 1 }
+
+                            Right ->
+                                { head | x = head.x + 1 }
+
+                    isEatingFood =
+                        newHead.x == food.x && newHead.y == food.y
+
+                    newTail =
+                        if isEatingFood then
+                            head :: tail
+
+                        else
+                            case List.init tail of
+                                Nothing ->
+                                    []
+
+                                Just end ->
+                                    head :: end
+
+                    newScore =
+                        if isEatingFood then
+                            score + 1
+
+                        else
+                            score
+
+                    newHighScore =
+                        max highScore newScore
+                in
+                if List.any ((==) newHead) newTail || isOutOfBounds newHead then
+                    ( { model | isGameover = True }, Cmd.none )
+
+                else
+                    ( { model
+                        | head = newHead
+                        , tail = newTail
+                        , score = newScore
+                        , highScore = newHighScore
+                      }
+                    , if isEatingFood then
+                        Cmd.batch [ generateFood, saveHighScore newHighScore ]
+
+                      else
+                        Cmd.none
+                    )
+
+        SetDirection newDirection ->
+            if areOppositeDirections direction newDirection then
+                ( model, Cmd.none )
+
+            else
+                ( { model | direction = newDirection }, Cmd.none )
+
+        SetFood newFood ->
+            ( { model | food = newFood }, Cmd.none )
+
+        Restart ->
+            ( { initialModel | highScore = highScore }, Cmd.none )
 
 
 view : Model -> Html Msg
-view snake =
-    let
-        { width, height } =
-            snake.size
-
-        ( w, h ) =
-            ( toFloat width, toFloat height )
-
-        pitWidth_ =
-            toFloat <| pitWidth * pitBlock
-
-        pitHeight_ =
-            toFloat <| pitHeight * pitBlock
-
-        pitBlock_ =
-            toFloat pitBlock
-
-        --fruitImg = toForm <| image pitBlock pitBlock "apple.png"
-        fruitImg =
-            toForm <| image pitBlock pitBlock "https://raw.githubusercontent.com/pdamoc/elmChallenges/master/apple.png"
-
-        fruit =
-            case snake.fruit of
-                Just ( x, y ) ->
-                    [ fruitImg |> moveXY ( x, y ) ]
-
-                Nothing ->
-                    []
-
-        score =
-            scoreFromSpeed snake.speed
-
-        msg =
-            case snake.status of
-                Start ->
-                    "Press SPACE to Start!"
-
-                Active ->
-                    ""
-
-                Paused ->
-                    "Press SPACE to Unpause"
-
-                End ->
-                    "Press SPACE to Restart"
-
-                HighScore ->
-                    "New High Score: " ++ (toString <| score)
-
-        info =
-            case snake.status of
-                Active ->
-                    []
-
-                End ->
-                    [ rect (pitWidth_ - 2 * pitBlock_) (pitHeight_ - 2 * pitBlock_)
-                        |> filled (rgba 100 100 100 0.8)
-                    , highScoresList snake.highScores |> move ( 0.0, 2 * pitBlock_ )
-                    , (coloredText msg white)
-                    ]
-
-                HighScore ->
-                    [ rect (pitWidth_ - 2 * pitBlock_) (pitHeight_ - 2 * pitBlock_)
-                        |> filled (rgba 100 100 100 0.8)
-                    , (coloredText msg white)
-                    ]
-
-                _ ->
-                    [ (coloredText msg white) ]
-
-        highScoreForm =
-            case snake.status of
-                HighScore ->
-                    [ highScoreInput snake ]
-
-                _ ->
-                    []
-
-        scoreText =
-            if snake.status == Active then
-                (toString score)
-            else
-                ""
-
-        scoreForm =
-            fromString scoreText
-                |> monospace
-                |> Text.color darkGrey
-                |> Text.height 40
-                |> text
-                |> moveXY ( (pitWidth // 2), 0 )
-
-        elements =
-            collage width
-                height
-                ([ rect w h
-                    |> filled (rgb 29 41 81)
-                 , rect (pitWidth_ + 2 * pitBlock_) (pitHeight_ + 2 * pitBlock_)
-                    |> filled
-                        (if snake.status == End then
-                            red
-                         else
-                            darkBrown
-                        )
-                 , rect pitWidth_ pitHeight_
-                    |> filled black
-                 , scoreForm
-                 ]
-                    ++ (renderSnake snake)
-                    ++ fruit
-                    ++ info
+view ({ head, tail, isGameover, food, score, highScore } as model) =
+    div []
+        [ div [ class "screen" ]
+            [ div
+                [ class "box"
+                , style "background-color" "green"
+                , style "left" (String.fromInt (food.x * 20) ++ "px")
+                , style "top" (String.fromInt (food.y * 20) ++ "px")
+                ]
+                []
+            , div []
+                (List.map
+                    (\box ->
+                        div
+                            [ class "box"
+                            , style "left" (String.fromInt (box.x * 20) ++ "px")
+                            , style "top" (String.fromInt (box.y * 20) ++ "px")
+                            ]
+                            []
+                    )
+                    (head :: tail)
                 )
-    in
-        div []
-            ([ toHtml elements
-             ]
-                ++ highScoreForm
-            )
-
-
-type SnakePart
-    = Head
-    | Body
-
-
-moveXY : ( Int, Int ) -> Form -> Form
-moveXY ( x, y ) =
-    let
-        halfPit =
-            pitBlock // 2
-
-        halfWidth =
-            pitWidth // 2
-
-        halfHeight =
-            pitHeight // 2
-    in
-        move
-            ( toFloat <| (x - halfWidth) * pitBlock + halfPit
-            , toFloat <| (halfHeight - y) * pitBlock - halfPit
-            )
-
-
-renderSnakePart : SnakePart -> ( Int, Int ) -> Form
-renderSnakePart part ( x, y ) =
-    let
-        partColor =
-            if part == Head then
-                darkYellow
-            else
-                yellow
-
-        pitBlock_ =
-            toFloat pitBlock
-    in
-        group
-            [ rect pitBlock_ pitBlock_ |> filled partColor
-            , rect pitBlock_ pitBlock_ |> outlined (solid darkBrown)
-            , if part == Head then
-                ngon 5 (pitBlock_ / 2.2) |> outlined (solid red)
-              else
-                rect (pitBlock_ / 1.2) (pitBlock_ / 1.2)
-                    |> outlined (solid darkBrown)
             ]
-            |> moveXY ( x, y )
+        , div [ class "message" ] [ text ("High Score: " ++ String.fromInt highScore) ]
+        , div [ class "message" ] [ text ("Score: " ++ String.fromInt score) ]
+        , if isGameover then
+            div []
+                [ div [ class "message" ] [ text "Game Over" ]
+                , button [ class "restart-button", onClick Restart ]
+                    [ text "Restart" ]
+                ]
+
+          else
+            text ""
+        ]
 
 
-renderSnake : Model -> List Form
-renderSnake snake =
-    case snake.body of
-        hd :: tl ->
-            renderSnakePart Head hd :: List.map (renderSnakePart Body) tl
-
-        [] ->
-            []
-
-
-
--- WIRING
+generateFood : Cmd Msg
+generateFood =
+    Random.generate SetFood
+        (Random.map2
+            (\x y -> { x = x, y = y })
+            (Random.int 0 19)
+            (Random.int 0 19)
+        )
 
 
-main : Program HighScores Model Msg
-main =
-    programWithFlags
-        { init = init
-        , update = update
-        , view = view
-        , subscriptions =
-            (\_ ->
-                Sub.batch
-                    [ Window.resizes Resize
-                    , AnimationFrame.diffs Tick
-                    , Keyboard.downs (Keys << toKeyPress)
-                    ]
+keyPressDecoder : Decode.Decoder Msg
+keyPressDecoder =
+    Decode.field "key" Decode.string
+        |> Decode.map
+            (\key ->
+                case String.toUpper key of
+                    "W" ->
+                        SetDirection Up
+
+                    "S" ->
+                        SetDirection Down
+
+                    "A" ->
+                        SetDirection Left
+
+                    "D" ->
+                        SetDirection Right
+
+                    _ ->
+                        NoOp
             )
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ Time.every 200 (\_ -> Tick)
+        , onKeyPress keyPressDecoder
+        ]
+
+
+port saveHighScore : Int -> Cmd msg
+
+
+main : Program Decode.Value Model Msg
+main =
+    Browser.element
+        { init = init
+        , view = view
+        , update = update
+        , subscriptions = subscriptions
         }
-
-
-port saveHighScore : HighScores -> Cmd msg

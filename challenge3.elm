@@ -1,138 +1,141 @@
-module Main exposing (..)
+module Challenge3 exposing (main)
 
-import Svg exposing (..)
-import Html exposing (Html, body, div, button, program)
-import Html.Attributes as HAttr
-import Html.Events exposing (onClick, on, keyCode)
-import Svg.Attributes exposing (width, height, viewBox, xmlSpace, cx, cy, r, fill)
-import Window exposing (Size)
-import Random exposing (generate, pair, int)
-import Time exposing (every, Time)
-import Task
-import Char
-import Keyboard
+import Browser
+import Browser.Events exposing (onKeyPress, onResize)
+import Html exposing (Html, button, div, text)
+import Html.Attributes exposing (class, style)
+import Html.Events exposing (onClick)
+import Json.Decode as Decode
+import Random
+import Time
 
 
-interval : Time
-interval =
-    500
+type alias WindowSize =
+    { width : Int, height : Int }
+
+
+type alias Dot =
+    { x : Float, y : Float }
 
 
 type alias Model =
-    { locs : List ( Int, Int )
-    , size : Size
+    { dots : List Dot
+    , windowSize : WindowSize
     , isRunning : Bool
     }
 
 
-init : ( Model, Cmd Msg )
-init =
-    { locs = []
-    , size = Size 0 0
-    , isRunning = True
-    }
-        ! [ Task.perform Resize Window.size ]
+init : WindowSize -> ( Model, Cmd Msg )
+init windowSize =
+    ( { dots = [], windowSize = windowSize, isRunning = True }, Cmd.none )
 
 
 type Msg
-    = Resize Size
-    | Tick Time
-    | NewDot ( Int, Int )
+    = SetWindowSize WindowSize
+    | Tick
+    | NewDot Dot
     | ToggleRunning
-    | Reset
+    | Restart
     | DoNothing
+
+
+generateNewDot : Cmd Msg
+generateNewDot =
+    Random.generate NewDot
+        (Random.pair (Random.float 0 1) (Random.float 0 1)
+            |> Random.map (\( x, y ) -> { x = x, y = y })
+        )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Resize size ->
-            { model | size = size } ! []
+        SetWindowSize windowSize ->
+            ( { model | windowSize = windowSize }, Cmd.none )
 
-        Tick _ ->
-            let
-                generator =
-                    pair (int 10 (model.size.width - 10)) (int 10 (model.size.height - 10))
+        Tick ->
+            ( model, generateNewDot )
 
-                cmd =
-                    if model.isRunning then
-                        generate NewDot generator
-                    else
-                        Cmd.none
-            in
-                model ! [ cmd ]
-
-        NewDot pos ->
-            { model | locs = pos :: model.locs } ! []
+        NewDot dot ->
+            ( { model | dots = dot :: model.dots }, Cmd.none )
 
         ToggleRunning ->
-            { model | isRunning = not model.isRunning } ! []
+            ( { model | isRunning = not model.isRunning }, Cmd.none )
 
-        Reset ->
-            { model | locs = [] } ! []
+        Restart ->
+            ( { model | dots = [], isRunning = True }, Cmd.none )
 
         DoNothing ->
-            model ! []
-
-
-onKeyUp : Int -> Msg
-onKeyUp code =
-    case (Char.toUpper <| Char.fromCode code) of
-        'P' ->
-            ToggleRunning
-
-        'R' ->
-            Reset
-
-        _ ->
-            DoNothing
+            ( model, Cmd.none )
 
 
 view : Model -> Html Msg
 view model =
-    let
-        w =
-            toString model.size.width
+    div []
+        [ div []
+            (List.map
+                (\dot ->
+                    let
+                        left =
+                            String.fromFloat (toFloat model.windowSize.width * dot.x) ++ "px"
 
-        h =
-            toString (model.size.height - 5)
+                        top =
+                            String.fromFloat (toFloat model.windowSize.height * dot.y) ++ "px"
+                    in
+                    div [ class "dot", style "left" left, style "top" top ] []
+                )
+                model.dots
+            )
+        , button [ onClick Restart ] [ text "Restart" ]
+        , button [ onClick ToggleRunning ]
+            [ text <|
+                if model.isRunning then
+                    "Pause"
 
-        -- without substraction, scroll bars are triggered
-        viewBoxA =
-            viewBox ("0 0 " ++ w ++ " " ++ h)
-
-        sLocs =
-            List.map (\( x, y ) -> ( toString x, toString y )) model.locs
-
-        toCircle ( x, y ) =
-            circle [ cx x, cy y, r "10", fill "lightBlue" ] []
-
-        playPauseLabel =
-            if model.isRunning then
-                "Pause"
-            else
-                "Play"
-
-        buttons =
-            div [ HAttr.style [ ( "position", "absolute" ) ] ]
-                [ button [ onClick ToggleRunning ] [ text playPauseLabel ]
-                , button [ onClick Reset ] [ text "Reset" ]
-                ]
-    in
-        div []
-            [ buttons
-            , svg
-                [ width w, height h, viewBoxA, xmlSpace "http://www.w3.org/2000/svg" ]
-                (List.map toCircle sLocs)
+                else
+                    "Resume"
             ]
+        ]
 
 
-main : Program Never Model Msg
+keyPressDecoder : Decode.Decoder Msg
+keyPressDecoder =
+    Decode.map
+        (\key ->
+            case String.toUpper key of
+                "P" ->
+                    ToggleRunning
+
+                "R" ->
+                    Restart
+
+                _ ->
+                    DoNothing
+        )
+        (Decode.field "key" Decode.string)
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ onResize (\width height -> SetWindowSize { width = width, height = height })
+        , Time.every 500
+            (\_ ->
+                if model.isRunning then
+                    Tick
+
+                else
+                    DoNothing
+            )
+        , onKeyPress keyPressDecoder
+        ]
+
+
+main : Program WindowSize Model Msg
 main =
-    program
+    Browser.element
         { init = init
-        , update = update
         , view = view
-        , subscriptions =
-            (\_ -> Sub.batch [ Window.resizes Resize, Time.every interval Tick, Keyboard.presses onKeyUp ])
+        , update = update
+        , subscriptions = subscriptions
         }

@@ -1,203 +1,177 @@
-module Main exposing (..)
+module Challenge4 exposing (main)
 
-import Html exposing (..)
-import Html.Attributes as Attr exposing (..)
-import Html.Events exposing (..)
+import Browser
+import Html exposing (Html, div, img, input, text)
+import Html.Attributes exposing (placeholder, src, value)
+import Html.Events exposing (onInput)
 import Http
-import Json.Decode as Json exposing (field)
-import String
-import Task exposing (..)
-import Set
-import String exposing (join)
-import Time exposing (second, Time)
-import AnimationFrame exposing (times)
-
-
--- MODEL
-
-
-type alias User =
-    { name : String
-    , avatar_url : String
-    , repos_url : String
-    , languages : List String
-    }
+import Json.Decode as Decode
+import List.Extra as List
+import Task exposing (Task)
+import Time exposing (Posix)
 
 
 type alias Model =
-    { query : String
-    , lastKeyPress : Maybe Time
+    { username : String
     , user : Maybe User
-    , lastUserName : String
+    , lastKeyPress : Maybe Posix
+    , lastUsername : String
     }
 
 
-init : Model
-init =
-    { query = "evancz", lastKeyPress = Nothing, user = Nothing, lastUserName = "" }
-
-
-
--- UPDATE
+init : () -> ( Model, Cmd Msg )
+init () =
+    ( { username = "evancz"
+      , user = Nothing
+      , lastKeyPress = Nothing
+      , lastUsername = ""
+      }
+    , Cmd.none
+    )
 
 
 type Msg
-    = Update (Maybe User)
-    | UpdateQuery String
-    | Tick Time
-    | DoNothing
-
-
-oldGet : String -> Json.Decoder a -> Task Http.Error a
-oldGet url decoder =
-    Http.get url decoder
-        |> Http.toTask
-
-
-lookupUser : String -> Cmd Msg
-lookupUser query =
-    ((oldGet ("http://api.github.com/users/" ++ query) decodeUser)
-        |> andThen
-            (\user ->
-                (oldGet user.repos_url decodeLanguages
-                    |> onError (\msg -> succeed [ toString msg ])
-                )
-                    |> andThen
-                        (\languages ->
-                            let
-                                user_ : User
-                                user_ =
-                                    { user | languages = notEmptyUnique languages }
-                            in
-                                succeed user_
-                        )
-            )
-    )
-        |> Task.attempt (Result.toMaybe >> Update)
-
-
-notEmptyUnique : List String -> List String
-notEmptyUnique xs =
-    List.filter (\x -> not <| String.isEmpty x) <| Set.toList <| Set.fromList xs
-
-
-decodeLanguages : Json.Decoder (List String)
-decodeLanguages =
-    (Json.list <|
-        Json.oneOf
-            [ (Json.at [ "language" ] Json.string)
-            , (Json.succeed "")
-            ]
-    )
-
-
-decodeUser : Json.Decoder User
-decodeUser =
-    Json.map4 User
-        (field "name" Json.string)
-        (field "avatar_url" Json.string)
-        (field "repos_url" Json.string)
-        (Json.succeed [])
+    = SetUsername String
+    | GetUser
+    | SetUser (Maybe User)
+    | Tick Posix
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        UpdateQuery str ->
-            ( { model | query = str, lastKeyPress = Nothing }, Cmd.none )
+        SetUsername username ->
+            ( { model | username = username }, Cmd.none )
 
-        Tick time ->
+        GetUser ->
+            ( model, getUser model.username )
+
+        SetUser user ->
+            ( { model | user = user }, Cmd.none )
+
+        Tick now ->
             case model.lastKeyPress of
                 Nothing ->
-                    ( { model | lastKeyPress = Just time }, Cmd.none )
+                    ( { model | lastKeyPress = Just now }, Cmd.none )
 
-                Just t ->
-                    if ((time - t) > second) && (model.query /= model.lastUserName) then
-                        ( { model | lastKeyPress = Just t, lastUserName = model.query }, lookupUser model.query )
+                Just lastKeyPress ->
+                    if Time.posixToMillis now - Time.posixToMillis lastKeyPress >= 1000 then
+                        ( { model | lastKeyPress = Just now, lastUsername = model.username }
+                        , getUser model.username
+                        )
+
                     else
                         ( model, Cmd.none )
 
-        Update user ->
-            ( { model | user = user }, Cmd.none )
 
-        DoNothing ->
-            ( model, Cmd.none )
-
-
-
--- VIEW
+knownLanguages : List String -> String
+knownLanguages languages =
+    "Knows the following languages: " ++ String.join ", " languages
 
 
 view : Model -> Html Msg
 view model =
-    let
-        field =
-            input
-                [ placeholder "Please enter the GitHub username"
-                , value model.query
-                , onInput UpdateQuery
-                , myStyle
-                ]
-                []
+    div []
+        [ input
+            [ placeholder "Github username"
+            , onInput SetUsername
+            , value model.username
+            ]
+            []
+        , case model.user of
+            Nothing ->
+                text ""
 
-        messages =
-            case model.user of
-                Nothing ->
-                    let
-                        msg =
-                            case model.lastKeyPress of
-                                Nothing ->
-                                    "Looking for user..."
-
-                                Just t ->
-                                    "User not found :("
-                    in
-                        [ div [ myStyle ] [ text msg ] ]
-
-                Just user ->
-                    [ div [ myStyle ] [ text user.name ]
-                    , img [ src user.avatar_url, imgStyle ] []
-                    , div [ myStyle ] [ text <| knownLanguages user.languages ]
+            Just user ->
+                div []
+                    [ div [] [ text user.name ]
+                    , img [ src user.picture ] []
+                    , div [] [ text (knownLanguages user.languages) ]
                     ]
-    in
-        div [] ((div [ myStyle ] [ text "GitHub Username" ]) :: field :: messages)
-
-
-knownLanguages : List String -> String
-knownLanguages langs =
-    "Knows the following programming languages: " ++ (join ", " langs)
-
-
-imgStyle : Attribute msg
-imgStyle =
-    style
-        [ ( "display", "block" )
-        , ( "margin-left", "auto" )
-        , ( "margin-right", "auto" )
         ]
 
 
-myStyle : Attribute msg
-myStyle =
-    style
-        [ ( "width", "100%" )
-        , ( "height", "40px" )
-        , ( "padding", "10px 0" )
-        , ( "font-size", "2em" )
-        , ( "text-align", "center" )
-        ]
+type alias User =
+    { name : String
+    , picture : String
+    , reposUrl : String
+    , languages : List String
+    }
 
 
+getUrl : String -> Decode.Decoder a -> Task Http.Error a
+getUrl url decoder =
+    Http.get url decoder
+        |> Http.toTask
 
--- WIRING
+
+userDecoder : Decode.Decoder User
+userDecoder =
+    Decode.map4 User
+        (Decode.field "name" Decode.string)
+        (Decode.field "avatar_url" Decode.string)
+        (Decode.field "repos_url" Decode.string)
+        (Decode.succeed [])
 
 
-main : Program Never Model Msg
+languagesDecoder : Decode.Decoder (List String)
+languagesDecoder =
+    Decode.map
+        (\languages -> List.unique (List.filter (\s -> s /= "") languages))
+        (Decode.list
+            (Decode.oneOf
+                [ Decode.at [ "language" ] Decode.string
+                , Decode.succeed ""
+                ]
+            )
+        )
+
+
+errorToString : Http.Error -> String
+errorToString error =
+    case error of
+        Http.BadUrl message ->
+            "Bad Url, " ++ message
+
+        Http.Timeout ->
+            "Request timeout error"
+
+        Http.NetworkError ->
+            "Network error, make sure you're connected to the internet"
+
+        Http.BadStatus response ->
+            "Bad status, " ++ response.status.message
+
+        Http.BadPayload message response ->
+            "Bad payload, " ++ message
+
+
+getUser : String -> Cmd Msg
+getUser username =
+    getUrl ("https://api.github.com/users/" ++ username) userDecoder
+        |> Task.andThen
+            (\user ->
+                (getUrl user.reposUrl languagesDecoder
+                    |> Task.onError (\msg -> Task.succeed [ errorToString msg ])
+                )
+                    |> Task.andThen
+                        (\languages ->
+                            Task.succeed { user | languages = languages }
+                        )
+            )
+        |> Task.attempt (Result.toMaybe >> SetUser)
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Time.every 100 Tick
+
+
+main : Program () Model Msg
 main =
-    program
-        { init = ( init, lookupUser "evancz" )
-        , update = update
+    Browser.element
+        { init = init
         , view = view
-        , subscriptions =
-            (\_ -> times Tick)
+        , update = update
+        , subscriptions = subscriptions
         }

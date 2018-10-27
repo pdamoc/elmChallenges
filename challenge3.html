@@ -1,0 +1,25 @@
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+    }
+    .dot {
+      position: absolute;
+      background-color: blue;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+    }
+  </style>
+</head>
+<body>
+  <main></main>
+  <script>
+    var app = Elm.Challenge3.init({
+      node: document.querySelector('main'),
+      flags: { width: window.innerWidth, height: window.innerHeight }
+    })
+  </script>
+</body>
+</html>

@@ -4,9 +4,7 @@ This is a learning project that provides some interesting challenges for the Elm
 
 The challenges were provided by Gil Mizrahi. 
 
-The example code that comes with these challenges requires Elm 0.18 
-
-The code was originally written for 0.15 and might contain outdated idioms.  
+The example code that comes with these challenges requires Elm 0.19 
 
 ## Challenge No. 1
 
@@ -38,3 +36,11 @@ Write a snake clone. Make it save the top score for each user using local storag
 ## Challenge No. 6 
 
 With the previous challenge, separate the high score from the rest of the application in its own module so it can be reused in another game. Separate the game into its own module so it can be loaded from another application. 
+
+## Solutions on Ellie
+
+Challenge No. 1: https://ellie-app.com/3GLYq5bGBrTa1
+Challenge No. 2: https://ellie-app.com/3JRgRxpsmrga1
+Challenge No. 3: https://ellie-app.com/3JRgcdfNbcqa1
+Challenge No. 4: https://ellie-app.com/3JRkNHxXSBKa1
+Challenge No. 5: https://ellie-app.com/3JR928vMzJBa1

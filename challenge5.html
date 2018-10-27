@@ -1,25 +1,42 @@
-<!DOCTYPE HTML>
 <html>
-
 <head>
-  <meta charset="UTF-8">
-  <title>Elm • Challenge 5</title>
-  <script type="text/javascript" src="elm.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+    }
+    .screen {
+      background-color: black;
+      width: 400px;
+      height: 400px;
+      position: relative;
+      margin: 50px auto;
+    }
+    .box {
+      background-color: blue;
+      width: 20px;
+      height: 20px;
+      position: absolute;
+    }
+    .message {
+      margin-bottom: 20px;
+    }
+    .restart-button {
+      margin: 0 auto;
+      display: block;
+    }
+  </style>
 </head>
-
-<body style="margin: 0px;">
+<body>
+  <main></main>
+  <script>
+    var app = Elm.Challenge5.init({
+      node: document.querySelector('main'),
+      flags: localStorage.getItem('highScore')
+    })
+    app.ports.saveHighScore.subscribe(function(highScore) {
+      localStorage.setItem('highScore', JSON.stringify(highScore))
+    })
+  </script>
 </body>
-
-<script type="text/javascript">
-var storedHighScores = localStorage.getItem('elm-challenge5');
-var startingHighScores = storedHighScores ? JSON.parse(storedHighScores) : null;
-
-var app = Elm.ChallengeFive.fullscreen(startingHighScores);
-
-app.ports.saveHighScore.subscribe(function(state) {
-    localStorage.setItem('elm-challenge5', JSON.stringify(state));
-});
-
-</script>
-
 </html>
