@@ -1,0 +1,27 @@
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+    }
+    .container {
+      font-family: sans-serif;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: background-color 0.1s;
+    }
+  </style>
+</head>
+<body>
+  <main></main>
+  <script>
+    Elm.Challenge1.init({
+      node: document.querySelector('main'),
+      flags: { mouseX: 0, windowWidth: window.innerWidth }
+    })
+  </script>
+</body>
+</html>

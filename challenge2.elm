@@ -1,86 +1,90 @@
-module Challenge2 exposing (..)
+module Challenge2 exposing (main)
 
-import Svg exposing (..)
-import Svg.Attributes exposing (width, height, viewBox, xmlSpace, cx, cy, r, fill)
-import Window exposing (Size)
-import Random exposing (generate, pair, int)
-import Time exposing (every, Time)
-import Task
-import Html
+import Browser
+import Browser.Events exposing (onResize)
+import Html exposing (Html, div, text)
+import Html.Attributes exposing (class, style)
+import Random
+import Time
 
 
-interval : Time
-interval =
-    500
+type alias WindowSize =
+    { width : Int, height : Int }
+
+
+type alias Dot =
+    { x : Float, y : Float }
 
 
 type alias Model =
-    { locs : List ( Int, Int )
-    , size : Size
+    { dots : List Dot
+    , windowSize : WindowSize
     }
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( { locs = []
-      , size = Size 0 0
-      }
-    , Task.perform Resize Window.size
-    )
+init : WindowSize -> ( Model, Cmd Msg )
+init windowSize =
+    ( { dots = [], windowSize = windowSize }, Cmd.none )
 
 
 type Msg
-    = Resize Size
-    | Tick Time
-    | NewDot ( Int, Int )
+    = SetWindowSize WindowSize
+    | Tick
+    | NewDot Dot
+
+
+generateNewDot : Cmd Msg
+generateNewDot =
+    Random.generate NewDot
+        (Random.pair (Random.float 0 1) (Random.float 0 1)
+            |> Random.map (\( x, y ) -> { x = x, y = y })
+        )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Resize size ->
-            ( { model | size = size }, Cmd.none )
+        SetWindowSize windowSize ->
+            ( { model | windowSize = windowSize }, Cmd.none )
 
-        Tick _ ->
-            let
-                generator =
-                    pair (int 10 (model.size.width - 10)) (int 10 (model.size.height - 10))
-            in
-                ( model, generate NewDot generator )
+        Tick ->
+            ( model, generateNewDot )
 
-        NewDot pos ->
-            ( { model | locs = pos :: model.locs }, Cmd.none )
+        NewDot dot ->
+            ( { model | dots = dot :: model.dots }, Cmd.none )
 
 
-view : Model -> Svg msg
+view : Model -> Html Msg
 view model =
-    let
-        w =
-            toString model.size.width
+    div []
+        (List.map
+            (\dot ->
+                let
+                    left =
+                        String.fromFloat (toFloat model.windowSize.width * dot.x) ++ "px"
 
-        h =
-            toString (model.size.height - 5)
-
-        viewBoxA =
-            viewBox ("0 0 " ++ w ++ " " ++ h)
-
-        sLocs =
-            List.map (\( x, y ) -> ( toString x, toString y )) model.locs
-
-        toCircle ( x, y ) =
-            circle [ cx x, cy y, r "10", fill "lightBlue" ] []
-    in
-        svg
-            [ width w, height h, viewBoxA, xmlSpace "http://www.w3.org/2000/svg" ]
-            (List.map toCircle sLocs)
+                    top =
+                        String.fromFloat (toFloat model.windowSize.height * dot.y) ++ "px"
+                in
+                div [ class "dot", style "left" left, style "top" top ] []
+            )
+            model.dots
+        )
 
 
-main : Program Never Model Msg
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ onResize (\width height -> SetWindowSize { width = width, height = height })
+        , Time.every 500 (\_ -> Tick)
+        ]
+
+
+main : Program WindowSize Model Msg
 main =
-    Html.program
+    Browser.element
         { init = init
-        , update = update
         , view = view
-        , subscriptions =
-            (\_ -> Sub.batch [ Window.resizes Resize, Time.every interval Tick ])
+        , update = update
+        , subscriptions = subscriptions
         }
